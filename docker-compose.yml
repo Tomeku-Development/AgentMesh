@@ -1,0 +1,184 @@
+services:
+  # ── FoxMQ BFT Cluster (4 nodes) ────────────────────
+  foxmq-node1:
+    build: ./foxmq
+    container_name: mesh-foxmq-1
+    command: >
+      sh -c "
+        foxmq address-book from-list foxmq-node1:19793,foxmq-node2:19793,foxmq-node3:19793,foxmq-node4:19793 &&
+        foxmq user add buyer &&
+        foxmq user add supplier_a &&
+        foxmq user add supplier_b &&
+        foxmq user add logistics &&
+        foxmq user add inspector &&
+        foxmq user add oracle &&
+        foxmq user add bridge &&
+        foxmq run --secret-key-file=foxmq.d/key_0.pem
+      "
+    ports:
+      - "1883:1883"
+    networks:
+      - mesh-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c 'echo > /dev/tcp/localhost/1883' 2>/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  foxmq-node2:
+    build: ./foxmq
+    container_name: mesh-foxmq-2
+    command: >
+      sh -c "
+        foxmq address-book from-list foxmq-node1:19793,foxmq-node2:19793,foxmq-node3:19793,foxmq-node4:19793 &&
+        foxmq run --secret-key-file=foxmq.d/key_1.pem
+      "
+    ports:
+      - "1884:1883"
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  foxmq-node3:
+    build: ./foxmq
+    container_name: mesh-foxmq-3
+    command: >
+      sh -c "
+        foxmq address-book from-list foxmq-node1:19793,foxmq-node2:19793,foxmq-node3:19793,foxmq-node4:19793 &&
+        foxmq run --secret-key-file=foxmq.d/key_2.pem
+      "
+    ports:
+      - "1885:1883"
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  foxmq-node4:
+    build: ./foxmq
+    container_name: mesh-foxmq-4
+    command: >
+      sh -c "
+        foxmq address-book from-list foxmq-node1:19793,foxmq-node2:19793,foxmq-node3:19793,foxmq-node4:19793 &&
+        foxmq run --secret-key-file=foxmq.d/key_3.pem
+      "
+    ports:
+      - "1886:1883"
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  # ── MESH Agents ────────────────────────────────────
+  buyer:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-buyer
+    environment:
+      MESH_BROKER_HOST: foxmq-node1
+      MESH_BROKER_PORT: 1883
+      MESH_BROKER_USERNAME: buyer
+      MESH_AGENT_ROLE: buyer
+      MESH_CAPABILITIES: electronics
+      MESH_INITIAL_BALANCE: 10000
+    command: python -m mesh.cli --host foxmq-node1 --port 1883 --username buyer run-agent buyer --capabilities electronics --balance 10000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  supplier-a:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-supplier-a
+    command: python -m mesh.cli --host foxmq-node2 --port 1883 --username supplier_a run-agent supplier --capabilities electronics,displays,keyboards --balance 5000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node2:
+        condition: service_started
+
+  supplier-b:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-supplier-b
+    command: python -m mesh.cli --host foxmq-node3 --port 1883 --username supplier_b run-agent supplier --capabilities electronics,batteries,keyboards --balance 5000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node3:
+        condition: service_started
+
+  logistics:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-logistics
+    command: python -m mesh.cli --host foxmq-node4 --port 1883 --username logistics run-agent logistics --capabilities shipping,fragile --balance 2000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node4:
+        condition: service_started
+
+  inspector:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-inspector
+    command: python -m mesh.cli --host foxmq-node1 --port 1883 --username inspector run-agent inspector --capabilities quality_control,electronics --balance 2000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-oracle
+    command: python -m mesh.cli --host foxmq-node2 --port 1883 --username oracle run-agent oracle --capabilities market_data --balance 1000
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node2:
+        condition: service_started
+
+  # ── Bridge ─────────────────────────────────────────
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: mesh-bridge
+    command: python -m bridge.server --mqtt-host foxmq-node1 --mqtt-port 1883 --mqtt-username bridge --ws-port 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - mesh-net
+    depends_on:
+      foxmq-node1:
+        condition: service_healthy
+
+  # ── Dashboard ──────────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    container_name: mesh-dashboard
+    ports:
+      - "3000:80"
+    networks:
+      - mesh-net
+    depends_on:
+      - bridge
+
+networks:
+  mesh-net:
+    driver: bridge

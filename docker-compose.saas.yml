@@ -1,0 +1,70 @@
+# MESH SaaS Platform - extends base docker-compose.yml with PostgreSQL + API + Event Sink
+# Usage: docker compose -f docker-compose.yml -f docker-compose.saas.yml up
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: mesh-postgres
+    environment:
+      POSTGRES_USER: mesh
+      POSTGRES_PASSWORD: mesh
+      POSTGRES_DB: mesh_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - mesh-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mesh -d mesh_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Platform API (FastAPI) ─────────────────────────
+  platform-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.platform
+    container_name: mesh-platform-api
+    environment:
+      PLATFORM_DATABASE_URL: postgresql+asyncpg://mesh:mesh@postgres:5432/mesh_platform
+      PLATFORM_SECRET_KEY: ${PLATFORM_SECRET_KEY:-change-me-in-production-use-64-char-random}
+      PLATFORM_MQTT_HOST: foxmq-node1
+      PLATFORM_MQTT_PORT: 1883
+      PLATFORM_XENDIT_SECRET_KEY: ${PLATFORM_XENDIT_SECRET_KEY:-}
+      PLATFORM_XENDIT_WEBHOOK_TOKEN: ${PLATFORM_XENDIT_WEBHOOK_TOKEN:-}
+      PLATFORM_CRYPTOMUS_MERCHANT_ID: ${PLATFORM_CRYPTOMUS_MERCHANT_ID:-}
+      PLATFORM_CRYPTOMUS_API_KEY: ${PLATFORM_CRYPTOMUS_API_KEY:-}
+    ports:
+      - "8000:8000"
+    networks:
+      - mesh-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      foxmq-node1:
+        condition: service_healthy
+
+  # ── MQTT Event Sink ────────────────────────────────
+  event-sink:
+    build:
+      context: .
+      dockerfile: Dockerfile.platform
+    container_name: mesh-event-sink
+    command: ["python", "-m", "mesh_platform.sink.subscriber"]
+    environment:
+      PLATFORM_DATABASE_URL: postgresql+asyncpg://mesh:mesh@postgres:5432/mesh_platform
+      PLATFORM_MQTT_HOST: foxmq-node1
+      PLATFORM_MQTT_PORT: 1883
+    networks:
+      - mesh-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      foxmq-node1:
+        condition: service_healthy
+
+volumes:
+  pgdata:

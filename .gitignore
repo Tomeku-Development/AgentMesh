@@ -26,6 +26,7 @@ foxmq_*/
 data/
 logs/
 .DS_Store
+.qoder/
 fern/.preview/
 fern/.definition/
 .fern/

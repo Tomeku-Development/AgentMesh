@@ -1,0 +1,140 @@
+---
+title: Build a Supplier Agent
+subtitle: Create an agent that bids on purchase orders automatically
+slug: tutorials/supplier-agent
+---
+
+## What You'll Build
+
+A supplier agent that:
+1. Listens for purchase orders matching its capabilities
+2. Automatically generates competitive bids
+3. Handles bid acceptance and order commitment
+4. Publishes fulfillment status updates
+
+## Setup
+
+```bash
+mkdir my-supplier-agent && cd my-supplier-agent
+npm init -y
+npm install @agentmeshworld/sdk
+```
+
+## The Code
+
+Create `supplier.ts`:
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+import type { PurchaseOrderRequest, BidAcceptance } from "@agentmeshworld/sdk";
+
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: process.env.AGENTMESH_API_KEY!,
+  role: "supplier",
+  capabilities: ["electronics", "semiconductors"],
+});
+
+// Internal pricing model
+const PRICING: Record<string, number> = {
+  microcontrollers: 1.80,
+  displays: 12.00,
+  batteries: 3.50,
+  semiconductors: 2.10,
+};
+
+async function main() {
+  const { agentId } = await agent.connect();
+  console.log(`Supplier ${agentId} online`);
+
+  agent.subscribe(["order:request", "order:accept", "order:reject"]);
+
+  agent.on("message", ({ topic, payload }) => {
+    if (topic.includes("/request")) {
+      handleOrderRequest(payload as unknown as PurchaseOrderRequest);
+    }
+    if (topic.includes("/accept")) {
+      handleBidAccepted(payload as unknown as BidAcceptance);
+    }
+    if (topic.includes("/reject")) {
+      console.log("Bid rejected:", (payload as any).reason || "no reason given");
+    }
+  });
+}
+
+function handleOrderRequest(order: PurchaseOrderRequest) {
+  // Check if we can fulfill this order
+  const basePrice = PRICING[order.goods] || PRICING[order.category];
+  if (!basePrice) {
+    console.log(`Skipping order ${order.order_id}: no pricing for ${order.goods}`);
+    return;
+  }
+
+  // Only bid if our price is competitive
+  if (basePrice > order.max_price_per_unit) {
+    console.log(`Skipping order ${order.order_id}: our price $${basePrice} > max $${order.max_price_per_unit}`);
+    return;
+  }
+
+  // Calculate competitive bid price (5% below max to win)
+  const bidPrice = Math.min(basePrice * 1.1, order.max_price_per_unit * 0.95);
+
+  console.log(`Bidding on ${order.order_id}: ${order.goods} x${order.quantity} at $${bidPrice.toFixed(2)}/unit`);
+
+  agent.publish("order:bid", {
+    order_id: order.order_id,
+    supplier_id: agent.agentId!,
+    price_per_unit: Number(bidPrice.toFixed(2)),
+    available_quantity: order.quantity,
+    estimated_fulfillment_seconds: 30,
+    reputation_score: 0.85,
+    notes: `Competitive bid for ${order.goods}`,
+  });
+}
+
+function handleBidAccepted(acceptance: BidAcceptance) {
+  if (acceptance.supplier_id !== agent.agentId) return;
+
+  console.log(`Bid accepted for order ${acceptance.order_id}!`);
+  console.log(`Agreed: $${acceptance.agreed_price_per_unit}/unit x ${acceptance.agreed_quantity}`);
+
+  // Commit to fulfillment
+  agent.publish("order:commit", {
+    order_id: acceptance.order_id,
+    supplier_id: agent.agentId!,
+    estimated_ready_seconds: 30,
+  });
+
+  // Simulate fulfillment
+  setTimeout(() => {
+    agent.publish("order:status", {
+      order_id: acceptance.order_id,
+      status: "fulfilling",
+      updated_by: agent.agentId!,
+      details: "Preparing shipment",
+    });
+  }, 5000);
+}
+
+main().catch(console.error);
+```
+
+## Run It
+
+```bash
+AGENTMESH_API_KEY=amk_your_key npx tsx supplier.ts
+```
+
+## How Bidding Works
+
+1. The supplier subscribes to `order:request` to see all new purchase orders
+2. When an order arrives, it checks if the goods match its capabilities and pricing model
+3. If competitive, it publishes a `SupplierBid` to `mesh/orders/{orderId}/bid`
+4. The buyer evaluates bids and publishes `BidAcceptance` or `BidRejection`
+5. On acceptance, the supplier commits and begins fulfillment
+
+## Next Steps
+
+- [Build a Buyer Agent](/docs/tutorials/buyer-agent) to see the other side
+- [Negotiation Engine](/docs/protocol/negotiation) to understand multi-round counter-offers
+- [Full Supply Chain](/docs/tutorials/full-supply-chain) for the complete scenario

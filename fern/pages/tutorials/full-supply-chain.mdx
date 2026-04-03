@@ -1,0 +1,117 @@
+---
+title: Full Supply Chain
+subtitle: Run all 5 agent roles in a complete supply chain scenario
+slug: tutorials/full-supply-chain
+---
+
+## Overview
+
+This tutorial walks through the complete supply chain scenario: a buyer orders laptop components, suppliers bid, logistics handles shipping, an inspector verifies quality, and the oracle provides market pricing.
+
+## The 7-Phase Flow
+
+```
+Phase 0: DISCOVER    All agents announce presence and capabilities
+Phase 1: REQUEST     Buyer publishes a purchase order for laptop components
+Phase 2: BID         Two suppliers submit competing bids
+Phase 3: NEGOTIATE   Buyer counter-offers, supplier responds (up to 3 rounds)
+Phase 4: COMMIT      Winner commits, escrow locks buyer's funds
+Phase 5: EXECUTE     Supplier fulfills, logistics ships with transit updates
+Phase 6: VERIFY      Inspector checks quality (score: 0.97)
+Phase 7: SETTLE      Escrow released, fees deducted, reputation updated
+```
+
+## Running the Demo
+
+The project includes a built-in demo scenario. Clone the repo and run:
+
+```bash
+git clone https://github.com/Tomeku-Development/AgentMesh.git
+cd AgentMesh
+
+# Install Python dependencies
+pip install -e mesh/
+
+# Start the FoxMQ broker (Docker required)
+docker compose up -d foxmq
+
+# Run the demo
+python scripts/run_demo.py
+```
+
+## What Happens
+
+### Discovery (Phase 0)
+
+All agents publish `DiscoveryAnnounce` messages:
+
+```
+[buyer-01]     role=buyer, capabilities=[electronics]
+[supplier-01]  role=supplier, capabilities=[electronics, displays]
+[supplier-02]  role=supplier, capabilities=[electronics, batteries]
+[logistics-01] role=logistics, capabilities=[domestic-shipping]
+[inspector-01] role=inspector, capabilities=[electronics-qa]
+```
+
+### Order Request (Phase 1)
+
+The buyer publishes a purchase order:
+
+```json
+{
+  "order_id": "po-laptop-001",
+  "goods": "laptop-displays",
+  "category": "electronics",
+  "quantity": 1000,
+  "max_price_per_unit": 45.00,
+  "quality_threshold": 0.90,
+  "delivery_deadline_seconds": 60
+}
+```
+
+### Competitive Bidding (Phase 2)
+
+Both suppliers submit bids:
+
+```
+supplier-01: $42.00/unit (reputation: 0.88)
+supplier-02: $43.50/unit (reputation: 0.72)
+```
+
+### Settlement (Phase 7)
+
+After successful delivery and inspection:
+
+```
+Escrow released: 42,000 MESH_CREDIT to supplier-01
+Platform fee:       840 MESH_CREDIT (2%)
+Burn:               420 MESH_CREDIT (1%)
+Logistics payment: 500 MESH_CREDIT to logistics-01
+Inspector fee:     200 MESH_CREDIT to inspector-01
+
+Reputation updates:
+  supplier-01  electronics: 0.88 -> 0.91 (order_fulfilled)
+  logistics-01 shipping:    0.75 -> 0.78 (on_time)
+  inspector-01 qa:          0.80 -> 0.82 (quality_pass)
+```
+
+## Self-Healing Demo
+
+The demo includes a chaos event: `supplier-01` crashes mid-fulfillment.
+
+```
+[detector] supplier-01 missed 3 heartbeats (15s)
+[detector] ALERT: heartbeat_timeout, severity=critical
+[redistributor] Reassigning supplier-01's role to supplier-02
+[supplier-02] Assuming capabilities: [electronics, displays]
+[supplier-02] Transferred orders: [po-laptop-001]
+[supplier-02] Recovery mode: capacity at 50%, ramping up...
+```
+
+The mesh self-heals without any central coordinator.
+
+## Next Steps
+
+- [Architecture Overview](/docs/architecture/overview) for the full system design
+- [Economic Model](/docs/architecture/economic-model) for escrow, fees, and burn mechanics
+- [Self-Healing](/docs/architecture/self-healing) for the failure detection protocol

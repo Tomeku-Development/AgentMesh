@@ -1,0 +1,383 @@
+asyncapi: 3.0.0
+info:
+  title: AgentMesh WebSocket Gateway API
+  version: 0.1.0
+  description: |
+    WebSocket gateway for connecting agents to the AgentMesh network.
+    Agents connect via WebSocket, register with their role and capabilities,
+    then subscribe to topics and exchange messages through the mesh.
+  contact:
+    name: Tomeku Development
+    url: https://agentmesh.world
+  license:
+    name: MIT
+    url: https://github.com/Tomeku-Development/AgentMesh/blob/main/LICENSE
+
+servers:
+  production:
+    host: agentmesh.world
+    pathname: /ws/v1/agent
+    protocol: wss
+    description: Production WebSocket gateway
+    security:
+      - $ref: '#/components/securitySchemes/apiKey'
+  local:
+    host: localhost:8000
+    pathname: /ws/v1/agent
+    protocol: ws
+    description: Local development server
+
+channels:
+  clientRegister:
+    address: /
+    title: Register
+    description: First message after WebSocket connection. Registers the agent with a role and capabilities.
+    messages:
+      register:
+        $ref: '#/components/messages/WSRegisterMessage'
+
+  clientSubscribe:
+    address: /
+    title: Subscribe
+    description: Subscribe to one or more MQTT topics via friendly event names or raw topic patterns.
+    messages:
+      subscribe:
+        $ref: '#/components/messages/WSSubscribeMessage'
+
+  clientUnsubscribe:
+    address: /
+    title: Unsubscribe
+    description: Unsubscribe from one or more topics.
+    messages:
+      unsubscribe:
+        $ref: '#/components/messages/WSUnsubscribeMessage'
+
+  clientPublish:
+    address: /
+    title: Publish
+    description: Publish a message to a topic on the mesh network.
+    messages:
+      publish:
+        $ref: '#/components/messages/WSPublishMessage'
+
+  clientPing:
+    address: /
+    title: Ping
+    description: Keep-alive ping message. Server responds with pong.
+    messages:
+      ping:
+        $ref: '#/components/messages/WSPingMessage'
+
+  serverSystem:
+    address: /
+    title: System Event
+    description: |
+      System events sent by the server. Events include:
+      - `connected` — Agent successfully registered (data: agentId, workspace, workspaceId)
+      - `subscribed` — Topics subscribed (data: topics[])
+      - `unsubscribed` — Topics unsubscribed (data: topics[])
+      - `published` — Message published (data: topic)
+      - `error` — Error occurred (data: detail)
+    messages:
+      system:
+        $ref: '#/components/messages/WSSystemMessage'
+
+  serverMessage:
+    address: /
+    title: Incoming Message
+    description: A message received from the mesh network on a subscribed topic.
+    messages:
+      message:
+        $ref: '#/components/messages/WSMessageMessage'
+
+  serverPong:
+    address: /
+    title: Pong
+    description: Response to a client ping.
+    messages:
+      pong:
+        $ref: '#/components/messages/WSPongMessage'
+
+  serverAck:
+    address: /
+    title: Acknowledgement
+    description: Acknowledgement of a client message.
+    messages:
+      ack:
+        $ref: '#/components/messages/WSAckMessage'
+
+operations:
+  sendRegister:
+    action: send
+    channel:
+      $ref: '#/channels/clientRegister'
+    summary: Register agent with the gateway
+    description: Must be the first message sent after connection. Sets the agent's role, capabilities, and initial balance.
+
+  sendSubscribe:
+    action: send
+    channel:
+      $ref: '#/channels/clientSubscribe'
+    summary: Subscribe to topics
+
+  sendUnsubscribe:
+    action: send
+    channel:
+      $ref: '#/channels/clientUnsubscribe'
+    summary: Unsubscribe from topics
+
+  sendPublish:
+    action: send
+    channel:
+      $ref: '#/channels/clientPublish'
+    summary: Publish a message to the mesh
+
+  sendPing:
+    action: send
+    channel:
+      $ref: '#/channels/clientPing'
+    summary: Send keep-alive ping
+
+  receiveSystem:
+    action: receive
+    channel:
+      $ref: '#/channels/serverSystem'
+    summary: Receive system events
+
+  receiveMessage:
+    action: receive
+    channel:
+      $ref: '#/channels/serverMessage'
+    summary: Receive mesh messages
+
+  receivePong:
+    action: receive
+    channel:
+      $ref: '#/channels/serverPong'
+    summary: Receive pong response
+
+  receiveAck:
+    action: receive
+    channel:
+      $ref: '#/channels/serverAck'
+    summary: Receive acknowledgement
+
+components:
+  securitySchemes:
+    apiKey:
+      type: httpApiKey
+      name: api_key
+      in: query
+      description: API key with `amk_` prefix. Obtain from the workspace dashboard at agentmesh.world.
+
+  messages:
+    WSRegisterMessage:
+      name: register
+      title: Register Message
+      summary: Register an agent with the gateway
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSRegisterPayload'
+
+    WSSubscribeMessage:
+      name: subscribe
+      title: Subscribe Message
+      summary: Subscribe to MQTT topics
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSSubscribePayload'
+
+    WSUnsubscribeMessage:
+      name: unsubscribe
+      title: Unsubscribe Message
+      summary: Unsubscribe from topics
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSUnsubscribePayload'
+
+    WSPublishMessage:
+      name: publish
+      title: Publish Message
+      summary: Publish a message to a topic
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSPublishPayload'
+
+    WSPingMessage:
+      name: ping
+      title: Ping Message
+      summary: Keep-alive ping
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSPingPayload'
+
+    WSSystemMessage:
+      name: system
+      title: System Event
+      summary: System event from the gateway
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSSystemPayload'
+
+    WSMessageMessage:
+      name: message
+      title: Mesh Message
+      summary: Message received from the mesh network
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSMessagePayload'
+
+    WSPongMessage:
+      name: pong
+      title: Pong Message
+      summary: Response to ping
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSPongPayload'
+
+    WSAckMessage:
+      name: ack
+      title: Acknowledgement
+      summary: Acknowledgement of a client message
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/WSAckPayload'
+
+  schemas:
+    WSRegisterPayload:
+      type: object
+      required: [type, role]
+      properties:
+        type:
+          type: string
+          const: register
+        role:
+          type: string
+          enum: [buyer, supplier, logistics, inspector, oracle]
+          description: The agent's role in the supply chain
+        capabilities:
+          type: array
+          items:
+            type: string
+          default: []
+          description: Agent capabilities (e.g., ["electronics", "semiconductors"])
+        balance:
+          type: number
+          default: 10000.0
+          description: Initial MESH_CREDIT balance
+        agent_id:
+          type: string
+          nullable: true
+          description: Custom agent ID. Auto-generated (16-char hex) if omitted.
+
+    WSSubscribePayload:
+      type: object
+      required: [type, topics]
+      properties:
+        type:
+          type: string
+          const: subscribe
+        topics:
+          type: array
+          items:
+            type: string
+          description: |
+            Topics to subscribe to. Accepts friendly event names (e.g., "order:request")
+            or raw MQTT topic patterns (e.g., "mesh/orders/+/request").
+
+    WSUnsubscribePayload:
+      type: object
+      required: [type, topics]
+      properties:
+        type:
+          type: string
+          const: unsubscribe
+        topics:
+          type: array
+          items:
+            type: string
+
+    WSPublishPayload:
+      type: object
+      required: [type, topic, payload]
+      properties:
+        type:
+          type: string
+          const: publish
+        topic:
+          type: string
+          description: Topic to publish to (event name or raw MQTT topic)
+        payload:
+          type: object
+          additionalProperties: true
+          description: Message payload (JSON object)
+
+    WSPingPayload:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: ping
+
+    WSSystemPayload:
+      type: object
+      required: [type, event]
+      properties:
+        type:
+          type: string
+          const: system
+        event:
+          type: string
+          enum: [connected, subscribed, unsubscribed, published, error]
+          description: The system event type
+        data:
+          type: object
+          additionalProperties: true
+          default: {}
+          description: |
+            Event-specific data:
+            - connected: { agentId: string, workspace: string, workspaceId: string }
+            - subscribed: { topics: string[] }
+            - unsubscribed: { topics: string[] }
+            - published: { topic: string }
+            - error: { detail: string }
+
+    WSMessagePayload:
+      type: object
+      required: [type, topic, payload]
+      properties:
+        type:
+          type: string
+          const: message
+        topic:
+          type: string
+          description: The MQTT topic the message was received on
+        payload:
+          type: object
+          additionalProperties: true
+          description: The message payload
+        header:
+          type: object
+          additionalProperties: true
+          default: {}
+          description: Message envelope header (sender_id, timestamp, hlc, etc.)
+
+    WSPongPayload:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: pong
+
+    WSAckPayload:
+      type: object
+      required: [type, ref]
+      properties:
+        type:
+          type: string
+          const: ack
+        ref:
+          type: string
+          description: Reference ID of the acknowledged message

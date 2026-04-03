@@ -1,0 +1,102 @@
+---
+title: Negotiation Engine
+subtitle: Multi-round counter-offer protocol with pluggable strategies
+slug: protocol/negotiation
+---
+
+## Overview
+
+The negotiation engine enables multi-round price negotiation between buyers and suppliers. Up to **3 rounds** of counter-offers are supported before the negotiation expires.
+
+## Flow
+
+```
+Buyer                          Supplier
+  |                               |
+  |-- PurchaseOrderRequest ------>|
+  |                               |
+  |<------ SupplierBid -----------|
+  |                               |
+  |-- CounterOffer (round 1) ---->|  (buyer wants lower price)
+  |                               |
+  |<-- CounterOffer (round 2) ----|  (supplier adjusts)
+  |                               |
+  |-- BidAcceptance ------------->|  (buyer accepts)
+  |         OR                    |
+  |-- BidRejection -------------->|  (buyer walks away)
+```
+
+## Counter-Offer Message
+
+```json
+{
+  "order_id": "po-2026-001",
+  "counter_id": "uuid",
+  "original_bid_id": "bid-uuid",
+  "from_agent": "buyer-01",
+  "to_agent": "supplier-01",
+  "round": 1,
+  "proposed_price_per_unit": 2.15,
+  "proposed_quantity": null,
+  "proposed_deadline_seconds": null,
+  "justification": "Market rate for this category is $2.10",
+  "expires_seconds": 10
+}
+```
+
+## Rules
+
+1. **Max 3 rounds**: After round 3, the buyer must accept or reject
+2. **Expiration**: Each counter-offer has an `expires_seconds` deadline
+3. **Only price, quantity, and deadline** can be negotiated
+4. **Justification**: Each counter-offer includes a reason (used by adaptive strategies)
+
+## Strategies
+
+The negotiation engine supports three pluggable pricing strategies:
+
+### Aggressive
+
+- Starts with the lowest viable price
+- Makes small concessions (5% per round)
+- Walks away if the price exceeds `base_price * 1.15`
+- Best for: commodity goods with many suppliers
+
+### Conservative
+
+- Starts close to the buyer's max price
+- Makes moderate concessions (10% per round)
+- Accepts early to secure the order
+- Best for: specialized goods with few suppliers
+
+### Adaptive
+
+- Analyzes the counter-offer history to determine the other party's strategy
+- Adjusts concession size based on the opponent's behavior
+- Uses a weighted scoring formula: `0.6 * price_factor + 0.4 * reputation_factor`
+- Best for: general-purpose negotiation
+
+## Strategy Selection
+
+```python
+from mesh.negotiation.strategies import Aggressive, Conservative, Adaptive
+
+# Buyer uses adaptive strategy
+strategy = Adaptive(base_price=2.00, max_price=2.50, weight_price=0.6)
+
+# Given a supplier bid of $2.30/unit
+counter_price = strategy.counter(
+    their_price=2.30,
+    round=1,
+    their_reputation=0.85,
+)
+# Returns ~$2.15 (adaptive adjustment)
+```
+
+## Arbiter
+
+When two suppliers submit bids at the same price and reputation, the **arbiter** resolves ties:
+
+1. **Earlier timestamp** wins (HLC ordering)
+2. If timestamps are identical: **lower agent_id** wins (deterministic)
+3. The arbiter's decision is final and published as a `BidAcceptance`

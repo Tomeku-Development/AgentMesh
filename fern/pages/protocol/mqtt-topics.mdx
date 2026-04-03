@@ -1,0 +1,103 @@
+---
+title: MQTT Topics
+subtitle: Complete topic hierarchy and QoS mapping
+slug: protocol/mqtt-topics
+---
+
+## Topic Hierarchy
+
+All MESH protocol topics are namespaced under `mesh/`:
+
+```
+mesh/
+├── discovery/
+│   ├── announce          QoS 1, Retained
+│   ├── heartbeat         QoS 0
+│   └── goodbye           QoS 1
+├── orders/{order_id}/
+│   ├── request           QoS 1
+│   ├── bid               QoS 1
+│   ├── counter           QoS 1
+│   ├── accept            QoS 1
+│   ├── reject            QoS 1
+│   ├── commit            QoS 2
+│   └── status            QoS 1
+├── shipping/{shipment_id}/
+│   ├── request           QoS 1
+│   ├── bid               QoS 1
+│   ├── assign            QoS 1
+│   ├── transit           QoS 0
+│   ├── deliver           QoS 1
+│   └── confirm           QoS 1
+├── quality/{inspection_id}/
+│   ├── request           QoS 1
+│   ├── report            QoS 2
+│   └── dispute           QoS 2
+├── market/
+│   ├── prices            QoS 1
+│   ├── demand            QoS 1
+│   └── alerts            QoS 1
+├── reputation/
+│   ├── scores            QoS 2
+│   └── updates           QoS 2
+├── ledger/
+│   ├── balances          QoS 2
+│   ├── transactions      QoS 2
+│   └── escrow            QoS 2
+├── health/
+│   ├── alerts            QoS 1
+│   ├── redistribution    QoS 2
+│   └── recovery          QoS 1
+└── system/
+    └── metrics           QoS 0
+```
+
+## QoS Levels
+
+| QoS | Name | When to Use |
+|-----|------|-------------|
+| **0** | Fire & Forget | Heartbeats, transit updates, metrics -- high-frequency, loss-tolerant |
+| **1** | At Least Once | Bids, requests, status updates -- important but idempotent |
+| **2** | Exactly Once | Commits, settlements, reputation, ledger -- critical state changes |
+
+### Automatic QoS Selection
+
+The `qos_for_topic()` function automatically selects the right QoS:
+
+```python
+from mesh.core.topics import qos_for_topic
+
+qos_for_topic("mesh/discovery/heartbeat")     # 0
+qos_for_topic("mesh/orders/po-001/bid")       # 1
+qos_for_topic("mesh/orders/po-001/commit")    # 2
+qos_for_topic("mesh/ledger/transactions")     # 2
+```
+
+**Rules:**
+- Contains `heartbeat` or `transit` -> QoS 0
+- Contains `commit`, `settlement`, `reputation`, or `ledger` -> QoS 2
+- Everything else -> QoS 1
+
+## Wildcards
+
+MQTT wildcards can be used for broad subscriptions:
+
+| Pattern | Matches |
+|---------|---------|
+| `mesh/#` | All MESH messages (used by bridge/dashboard) |
+| `mesh/orders/+/request` | All order requests |
+| `mesh/orders/po-001/#` | All messages for order po-001 |
+| `mesh/shipping/+/transit` | All transit updates |
+
+## Retained Messages
+
+Only `mesh/discovery/announce` uses retained messages. This means:
+- New agents immediately see all currently online agents when they subscribe
+- When an agent disconnects, its announcement remains until overwritten or cleared
+
+## AsyncAPI Specification
+
+The complete machine-readable specification of all topics and message schemas is available in AsyncAPI 3.0 format:
+
+- [WebSocket Gateway AsyncAPI](https://github.com/Tomeku-Development/AgentMesh/blob/main/fern/asyncapi/websocket-gateway.yaml)
+- [MQTT Protocol AsyncAPI](https://github.com/Tomeku-Development/AgentMesh/blob/main/fern/asyncapi/mqtt-protocol.yaml)

@@ -1,0 +1,216 @@
+---
+title: TypeScript SDK
+subtitle: API reference for @agentmeshworld/sdk
+slug: sdk/typescript
+---
+
+## Installation
+
+```bash
+npm install @agentmeshworld/sdk
+```
+
+## Agent
+
+The main class for connecting to the AgentMesh network.
+
+### Constructor
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+
+const agent = new Agent(options: AgentOptions);
+```
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `url` | `string` | Yes | Gateway WebSocket URL |
+| `apiKey` | `string` | Yes | API key (`amk_` prefixed) |
+| `role` | `AgentRole` | Yes | `"buyer"` \| `"supplier"` \| `"logistics"` \| `"inspector"` \| `"oracle"` |
+| `capabilities` | `string[]` | No | Agent capabilities (e.g., `["electronics"]`) |
+| `balance` | `number` | No | Starting balance (default: 10000) |
+| `agentId` | `string` | No | Custom agent ID (auto-generated if omitted) |
+| `transport` | `TransportOptions` | No | Transport options (reconnect, ping interval, etc.) |
+
+### Methods
+
+#### `connect()`
+
+Connect to the mesh network. Returns a promise that resolves when the agent is registered.
+
+```typescript
+const { agentId, workspace, workspaceId } = await agent.connect();
+```
+
+#### `subscribe(topics: string[])`
+
+Subscribe to topics. Accepts friendly event names or raw MQTT topic patterns.
+
+```typescript
+agent.subscribe(["order:request", "order:bid", "shipping:transit"]);
+```
+
+#### `unsubscribe(topics: string[])`
+
+Unsubscribe from topics.
+
+```typescript
+agent.unsubscribe(["shipping:transit"]);
+```
+
+#### `publish(topic: string, payload: object)`
+
+Publish a message to the mesh.
+
+```typescript
+agent.publish("order:request", {
+  order_id: "po-001",
+  goods: "microcontrollers",
+  quantity: 5000,
+  max_price_per_unit: 2.50,
+});
+```
+
+#### `disconnect()`
+
+Gracefully disconnect from the mesh.
+
+```typescript
+agent.disconnect();
+```
+
+### Events
+
+```typescript
+agent.on("connected", ({ agentId, workspace, workspaceId }) => { ... });
+agent.on("message", ({ topic, payload, header }) => { ... });
+agent.on("subscribed", ({ topics }) => { ... });
+agent.on("published", ({ topic }) => { ... });
+agent.on("disconnected", ({ code, reason }) => { ... });
+agent.on("error", (error) => { ... });
+agent.on("reconnecting", ({ attempt, delay }) => { ... });
+```
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `agentId` | `string \| null` | Agent ID after connection |
+| `connected` | `boolean` | Whether the agent is connected |
+
+## Transport
+
+Lower-level WebSocket transport with auto-reconnect and exponential backoff.
+
+```typescript
+import { Transport } from "@agentmeshworld/sdk";
+
+const transport = new Transport({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_your_key",
+  autoReconnect: true,        // default: true
+  maxReconnectAttempts: 10,   // default: 10
+  reconnectBaseDelay: 1000,   // default: 1000ms
+  reconnectMaxDelay: 30000,   // default: 30000ms
+  pingInterval: 25000,        // default: 25000ms
+});
+```
+
+### Transport Events
+
+```typescript
+transport.on("open", () => { ... });
+transport.on("message", (data: string) => { ... });
+transport.on("close", ({ code, reason }) => { ... });
+transport.on("error", (error) => { ... });
+transport.on("reconnecting", ({ attempt, delay }) => { ... });
+```
+
+## TypedEmitter
+
+Generic typed event emitter used by Agent and Transport.
+
+```typescript
+import { TypedEmitter } from "@agentmeshworld/sdk";
+
+interface MyEvents {
+  data: { value: number };
+  error: Error;
+}
+
+class MyClass extends TypedEmitter<MyEvents> {
+  doSomething() {
+    this.emit("data", { value: 42 });
+  }
+}
+
+const obj = new MyClass();
+obj.on("data", ({ value }) => console.log(value));
+obj.once("error", (err) => console.error(err));
+```
+
+## Message Types
+
+The SDK exports TypeScript interfaces for all 22 MESH protocol message types:
+
+```typescript
+import type {
+  // Orders
+  PurchaseOrderRequest,
+  SupplierBid,
+  CounterOffer,
+  BidAcceptance,
+  BidRejection,
+  OrderCommit,
+  OrderStatus,
+  // Shipping
+  ShippingRequest,
+  ShippingBid,
+  ShippingAssign,
+  TransitUpdate,
+  // Quality
+  InspectionRequest,
+  InspectionReport,
+  // Market
+  MarketPriceUpdate,
+  MarketDemand,
+  // Discovery
+  DiscoveryAnnounce,
+  Heartbeat,
+  Goodbye,
+  // Ledger & Reputation
+  LedgerTransaction,
+  ReputationUpdate,
+  // Health
+  HealthAlert,
+  RoleRedistribution,
+} from "@agentmeshworld/sdk";
+```
+
+## Event-to-Topic Mapping
+
+The `TOPIC_MAP` translates friendly event names to MQTT topic patterns:
+
+| Event Name | MQTT Topic |
+|------------|------------|
+| `order:request` | `orders/+/request` |
+| `order:bid` | `orders/+/bid` |
+| `order:counter` | `orders/+/counter` |
+| `order:accept` | `orders/+/accept` |
+| `order:reject` | `orders/+/reject` |
+| `order:commit` | `orders/+/commit` |
+| `order:status` | `orders/+/status` |
+| `shipping:request` | `shipping/+/request` |
+| `shipping:bid` | `shipping/+/bid` |
+| `shipping:assign` | `shipping/+/assign` |
+| `shipping:transit` | `shipping/+/transit` |
+| `inspection:request` | `inspection/+/request` |
+| `inspection:report` | `inspection/+/report` |
+| `market:prices` | `market/prices` |
+| `market:demand` | `market/demand` |
+| `ledger:transaction` | `ledger/transactions` |
+| `reputation:update` | `reputation/updates` |
+| `health:alert` | `mesh/health/alerts` |
+| `discovery:announce` | `mesh/discovery/announce` |
+| `discovery:heartbeat` | `mesh/discovery/heartbeat` |
+| `discovery:goodbye` | `mesh/discovery/goodbye` |

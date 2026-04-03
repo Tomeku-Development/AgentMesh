@@ -1,0 +1,79 @@
+---
+title: Agent Roles
+subtitle: The 5 agent roles in the AgentMesh network
+slug: architecture/agent-roles
+---
+
+## Role Overview
+
+Every agent on the mesh has exactly one role. Roles determine what topics an agent subscribes to and what actions it can take.
+
+| Role | Primary Action | Key Topics |
+|------|---------------|------------|
+| **Buyer** | Publish orders, evaluate bids | `order:request`, `order:accept` |
+| **Supplier** | Submit bids, fulfill orders | `order:bid`, `order:commit` |
+| **Logistics** | Ship goods, provide tracking | `shipping:bid`, `shipping:transit` |
+| **Inspector** | Verify quality | `inspection:report` |
+| **Oracle** | Provide market data | `market:prices`, `market:demand` |
+
+## Buyer
+
+The buyer initiates the supply chain process:
+
+1. Publishes a `PurchaseOrderRequest` with goods, quantity, max price, and quality threshold
+2. Receives `SupplierBid` messages during the bid window
+3. Evaluates bids using a scoring formula (price weight + reputation weight)
+4. Publishes `BidAcceptance` for the winner (triggers escrow lock)
+5. Monitors order status through fulfillment, shipping, and inspection
+6. After inspection passes, settlement releases escrow to the supplier
+
+## Supplier
+
+The supplier responds to purchase orders:
+
+1. Subscribes to `order:request` filtered by capabilities
+2. Checks if the order matches its goods categories and pricing model
+3. Publishes a `SupplierBid` with price, quantity, and estimated fulfillment time
+4. May receive `CounterOffer` messages and respond in negotiation rounds
+5. On acceptance, publishes `OrderCommit` to confirm
+6. Fulfills the order and updates status to `fulfilling` -> `shipping`
+
+## Logistics
+
+The logistics provider handles physical delivery:
+
+1. Subscribes to `shipping:request`
+2. Publishes `ShippingBid` with price, estimated transit time, and vehicle type
+3. On assignment, picks up goods and publishes `TransitUpdate` messages
+4. Status flow: `picked_up` -> `in_transit` -> `out_for_delivery` -> `delivered`
+5. Transit updates use QoS 0 for high-frequency, low-overhead tracking
+
+## Inspector
+
+The inspector verifies delivered goods:
+
+1. Subscribes to `inspection:request`
+2. Performs quality assessment (physical sensors, ML models, manual checks)
+3. Publishes `InspectionReport` with quality score, defect count, and recommendation
+4. Recommendation: `accept`, `partial_accept`, or `reject`
+5. Inspection reports use QoS 2 (exactly-once) since they affect settlement
+
+## Oracle
+
+The oracle provides market intelligence:
+
+1. Publishes `MarketPriceUpdate` with prices per goods category
+2. Publishes `MarketDemand` with demand forecasts and growth rates
+3. Other agents use oracle data to calibrate pricing strategies
+4. Oracles are passive -- they publish data but don't participate in orders
+
+## Role Redistribution
+
+When an agent fails (misses 3 heartbeats), the self-healing system can reassign its role:
+
+- A healthy agent with compatible capabilities takes over
+- Active orders are transferred to the replacement agent
+- The replacement starts in recovery mode at 50% capacity
+- Capacity ramps up gradually as the replacement proves reliable
+
+See [Self-Healing](/docs/architecture/self-healing) for details.

@@ -1,0 +1,115 @@
+---
+title: System Overview
+subtitle: Architecture of the AgentMesh platform
+slug: architecture/overview
+---
+
+## System Layers
+
+```
++-----------------------------------------------------------+
+|                    Dashboard (SvelteKit)                   |
++-----------------------------------------------------------+
+|                WebSocket Bridge (Python)                   |
++-----------------------------------------------------------+
+|                                                           |
+|  +----------+  +----------+  +----------+  +----------+  |
+|  |  Buyer   |  | Supplier |  | Logistics|  | Inspector|  |
+|  +----------+  +----------+  +----------+  +----------+  |
+|  |                  BaseAgent ABC                      |  |
+|  |  Identity | State | Registry | Ledger | Reputation  |  |
+|  +----------------------------------------------------+  |
+|                                                           |
+|  +----------------------------------------------------+  |
+|  |  Negotiation Engine  |  Self-Healing  |  Arbiter    |  |
+|  +----------------------------------------------------+  |
+|                                                           |
++-----------------------------------------------------------+
+|               FoxMQ BFT MQTT Cluster (4 nodes)            |
+|               Hashgraph Gossip | MQTT 5.0                 |
++-----------------------------------------------------------+
+```
+
+## Layer 1: FoxMQ BFT Cluster
+
+The foundation is a 4-node FoxMQ cluster providing:
+
+- **Total ordering**: All agents see messages in identical order via Hashgraph consensus
+- **Byzantine fault tolerance**: Tolerates f < n/3 faulty nodes (1 of 4)
+- **MQTT 5.0**: Standard pub/sub with QoS 0/1/2, retained messages, wildcards
+- **Sub-100ms latency**: Hashgraph gossip protocol
+
+```
+foxmq-node1 (1883) <--> foxmq-node2 (1884)
+     ^                        ^
+     |                        |
+     v                        v
+foxmq-node4 (1886) <--> foxmq-node3 (1885)
+```
+
+## Layer 2: Core Agent Framework
+
+The `mesh/` package provides the agent runtime:
+
+| Component | Description |
+|-----------|-------------|
+| **Identity** | Ed25519 keypairs, agent_id = SHA-256(public_key)[:16] |
+| **State** | Agent lifecycle: IDLE -> ACTIVE -> BUSY -> RECOVERING |
+| **Registry** | Peer discovery via retained announcements + heartbeat monitoring |
+| **Transport** | MQTT pub/sub wrapper with QoS-aware publishing |
+| **Clock** | Hybrid Logical Clocks for causal ordering |
+| **Crypto** | HMAC-SHA256 message signing, replay detection (30s window) |
+| **Ledger** | MESH_CREDIT balances, escrow, settlement |
+| **Reputation** | Per-capability scores with decay toward neutral (0.5) |
+
+## Layer 3: Agent Roles
+
+Five specialized agents extend `BaseAgent`:
+
+- **Buyer**: Publishes purchase orders, evaluates bids, manages escrow
+- **Supplier**: Monitors orders, submits bids, fulfills commitments
+- **Logistics**: Handles shipping, provides transit updates
+- **Inspector**: Performs quality inspections, publishes reports
+- **Oracle**: Publishes market prices and demand forecasts
+
+## Layer 4: Negotiation & Healing
+
+- **Negotiation Engine**: Multi-round counter-offer protocol (max 3 rounds) with pluggable strategies
+- **Self-Healing**: Heartbeat-based failure detection, role redistribution, gradual recovery
+- **Arbiter**: Dispute resolution and tie-breaking for simultaneous bids
+
+## Layer 5: Platform SaaS
+
+The `mesh_platform/` package adds enterprise features:
+
+- **REST API** (FastAPI): Auth, workspaces, orders, agents, ledger, payments, API keys
+- **WebSocket Gateway**: Bridges SDK connections to the MQTT mesh
+- **MQTT Sink**: Persists all mesh events to PostgreSQL
+- **Payments**: Xendit (fiat) and Cryptomus (crypto) integrations
+
+## Layer 6: Dashboard
+
+SvelteKit real-time visualization with WebSocket bridge:
+
+- Live agent status cards
+- Order flow visualization
+- Event log stream
+- Metrics panels
+- Chaos testing controls
+
+## Data Flow
+
+```
+SDK Agent
+   |
+   | WebSocket (wss)
+   v
+Platform Gateway --> MQTT Broker (FoxMQ)
+   |                      |
+   | REST API             | pub/sub
+   v                      v
+PostgreSQL           Other Agents
+   |
+   v
+Dashboard (via WS Bridge)
+```

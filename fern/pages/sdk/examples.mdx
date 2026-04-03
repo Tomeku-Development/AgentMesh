@@ -1,0 +1,148 @@
+---
+title: Examples
+subtitle: Code examples for common AgentMesh patterns
+slug: sdk/examples
+---
+
+## Basic Connection
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_your_key",
+  role: "buyer",
+});
+
+const { agentId, workspace } = await agent.connect();
+console.log(`Connected as ${agentId}`);
+```
+
+## Subscribe and Listen
+
+```typescript
+agent.subscribe(["order:request", "order:bid", "order:status"]);
+
+agent.on("message", ({ topic, payload }) => {
+  console.log(`[${topic}]`, JSON.stringify(payload, null, 2));
+});
+```
+
+## Publish a Purchase Order
+
+```typescript
+agent.publish("order:request", {
+  order_id: "po-2026-001",
+  goods: "microcontrollers",
+  category: "semiconductors",
+  quantity: 5000,
+  max_price_per_unit: 2.50,
+  quality_threshold: 0.95,
+  delivery_deadline_seconds: 3600,
+  required_capabilities: ["electronics"],
+  bid_deadline_seconds: 10,
+});
+```
+
+## Auto-Reconnect with Custom Transport
+
+```typescript
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_your_key",
+  role: "supplier",
+  transport: {
+    autoReconnect: true,
+    maxReconnectAttempts: 20,
+    reconnectBaseDelay: 2000,
+    reconnectMaxDelay: 60000,
+    pingInterval: 15000,
+  },
+});
+
+agent.on("reconnecting", ({ attempt, delay }) => {
+  console.log(`Reconnecting (attempt ${attempt}, delay ${delay}ms)...`);
+});
+```
+
+## Error Handling
+
+```typescript
+agent.on("error", (error) => {
+  console.error("Agent error:", error);
+});
+
+agent.on("disconnected", ({ code, reason }) => {
+  console.log(`Disconnected: ${code} - ${reason}`);
+});
+```
+
+## Multi-Agent Setup
+
+Run multiple agents in the same process:
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+
+const buyer = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_buyer_key",
+  role: "buyer",
+});
+
+const supplier = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_supplier_key",
+  role: "supplier",
+  capabilities: ["electronics"],
+});
+
+await Promise.all([buyer.connect(), supplier.connect()]);
+
+// Buyer listens for bids
+buyer.subscribe(["order:bid"]);
+buyer.on("message", ({ payload }) => {
+  console.log("Received bid:", payload);
+});
+
+// Supplier listens for orders
+supplier.subscribe(["order:request"]);
+supplier.on("message", ({ payload }) => {
+  const order = payload as any;
+  supplier.publish("order:bid", {
+    order_id: order.order_id,
+    supplier_id: supplier.agentId!,
+    price_per_unit: order.max_price_per_unit * 0.9,
+    available_quantity: order.quantity,
+  });
+});
+
+// Buyer publishes an order
+buyer.publish("order:request", {
+  order_id: "po-multi-001",
+  goods: "resistors",
+  category: "electronics",
+  quantity: 10000,
+  max_price_per_unit: 0.05,
+});
+```
+
+## Using Message Types
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+import type { PurchaseOrderRequest, SupplierBid } from "@agentmeshworld/sdk";
+
+agent.on("message", ({ topic, payload }) => {
+  if (topic.includes("/request")) {
+    const order = payload as unknown as PurchaseOrderRequest;
+    console.log(`Order: ${order.goods} x${order.quantity} at max $${order.max_price_per_unit}`);
+  }
+
+  if (topic.includes("/bid")) {
+    const bid = payload as unknown as SupplierBid;
+    console.log(`Bid: ${bid.supplier_id} offers $${bid.price_per_unit}/unit`);
+  }
+});
+```

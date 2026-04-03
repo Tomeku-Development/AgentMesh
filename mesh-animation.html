@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MESH - Decentralized Multi-Agent Supply Chain</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0e1a;color:#e0e6f0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;overflow:hidden;width:100vw;height:100vh}
+  canvas{display:block;position:absolute;top:0;left:0;z-index:1}
+  #overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
+  #title-bar{position:absolute;top:20px;left:50%;transform:translateX(-50%);text-align:center;z-index:3;pointer-events:none}
+  #title-bar h1{font-size:28px;font-weight:700;letter-spacing:4px;color:#00f0ff;text-shadow:0 0 20px rgba(0,240,255,0.4)}
+  #title-bar p{font-size:13px;color:#7a8ba8;margin-top:4px;letter-spacing:2px}
+  #phase-label{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);text-align:center;z-index:3;pointer-events:none}
+  #phase-label .phase{font-size:20px;font-weight:600;color:#ff6b3d;text-shadow:0 0 15px rgba(255,107,61,0.4);transition:opacity 0.5s}
+  #phase-label .desc{font-size:13px;color:#7a8ba8;margin-top:4px}
+  #legend{position:absolute;top:80px;right:20px;z-index:3;pointer-events:none;font-size:12px}
+  .legend-item{display:flex;align-items:center;margin-bottom:6px}
+  .legend-dot{width:10px;height:10px;border-radius:50%;margin-right:8px;flex-shrink:0}
+  #metrics{position:absolute;top:80px;left:20px;z-index:3;pointer-events:none;font-size:12px;background:rgba(10,14,26,0.85);border:1px solid rgba(0,240,255,0.15);border-radius:8px;padding:12px 16px}
+  .metric-row{display:flex;justify-content:space-between;margin-bottom:4px;gap:20px}
+  .metric-label{color:#7a8ba8}
+  .metric-val{color:#00f0ff;font-weight:600;font-variant-numeric:tabular-nums}
+  #controls{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:3;display:flex;gap:10px}
+  #controls button{background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.3);color:#00f0ff;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:12px;letter-spacing:1px;transition:all 0.2s;pointer-events:all}
+  #controls button:hover{background:rgba(0,240,255,0.2);border-color:rgba(0,240,255,0.6)}
+  #controls button.active{background:rgba(0,240,255,0.25);border-color:#00f0ff}
+  #event-log{position:absolute;bottom:110px;left:20px;z-index:3;pointer-events:none;font-size:11px;font-family:'SF Mono',Consolas,monospace;max-height:200px;overflow:hidden}
+  .log-line{opacity:0;animation:fadeIn 0.3s forwards;margin-bottom:2px;white-space:nowrap}
+  .log-line .ts{color:#555}
+  .log-line .msg{color:#7a8ba8}
+  .log-line.highlight .msg{color:#ff6b3d}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="overlay">
+  <div id="title-bar">
+    <h1>MESH</h1>
+    <p>DECENTRALIZED MULTI-AGENT SUPPLY CHAIN COORDINATION</p>
+  </div>
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#00f0ff"></div>Buyer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff6b3d"></div>Supplier</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Logistics</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Inspector</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div>Oracle</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#334155;border:1px solid #475569"></div>FoxMQ Node</div>
+  </div>
+  <div id="metrics">
+    <div class="metric-row"><span class="metric-label">Orders Completed</span><span class="metric-val" id="m-orders">0</span></div>
+    <div class="metric-row"><span class="metric-label">Messages Sent</span><span class="metric-val" id="m-messages">0</span></div>
+    <div class="metric-row"><span class="metric-label">Escrow Locked</span><span class="metric-val" id="m-escrow">0</span></div>
+    <div class="metric-row"><span class="metric-label">Credits Burned</span><span class="metric-val" id="m-burned">0</span></div>
+    <div class="metric-row"><span class="metric-label">Avg Reputation</span><span class="metric-val" id="m-rep">0.50</span></div>
+  </div>
+  <div id="phase-label">
+    <div class="phase" id="phase-text">INITIALIZING</div>
+    <div class="desc" id="phase-desc">Agents generating Ed25519 keypairs...</div>
+  </div>
+  <div id="event-log"></div>
+  <div id="controls">
+    <button id="btn-play" class="active">PLAY</button>
+    <button id="btn-pause">PAUSE</button>
+    <button id="btn-chaos">INJECT CHAOS</button>
+    <button id="btn-reset">RESET</button>
+  </div>
+</div>
+
+<script>
+const C = document.getElementById('canvas');
+const ctx = C.getContext('2d');
+let W, H, cx, cy;
+function resize() {
+  W = C.width = window.innerWidth;
+  H = C.height = window.innerHeight;
+  cx = W / 2; cy = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Colors
+const COLORS = {
+  buyer: '#00f0ff', supplier: '#ff6b3d', logistics: '#a855f7',
+  inspector: '#22c55e', oracle: '#eab308', foxmq: '#1e293b',
+  foxmqBorder: '#475569', bg: '#0a0e1a', grid: 'rgba(0,240,255,0.03)',
+  msgDefault: '#00f0ff'
+};
+
+// Agent definitions
+const ROLES = [
+  { id: 'buyer', label: 'BUYER', role: 'buyer', angle: -Math.PI/2 },
+  { id: 'supplier_a', label: 'SUPPLIER A', role: 'supplier', angle: -Math.PI/2 + Math.PI*2/5 },
+  { id: 'supplier_b', label: 'SUPPLIER B', role: 'supplier', angle: -Math.PI/2 + Math.PI*4/5 },
+  { id: 'logistics', label: 'LOGISTICS', role: 'logistics', angle: -Math.PI/2 + Math.PI*6/5 },
+  { id: 'inspector', label: 'INSPECTOR', role: 'inspector', angle: -Math.PI/2 + Math.PI*8/5 },
+];
+const ORACLE = { id: 'oracle', label: 'ORACLE', role: 'oracle' };
+
+// FoxMQ nodes
+const FOXMQ_NODES = [
+  { id: 'foxmq-1', label: 'FoxMQ-1', angle: -Math.PI/4 },
+  { id: 'foxmq-2', label: 'FoxMQ-2', angle: Math.PI/4 },
+  { id: 'foxmq-3', label: 'FoxMQ-3', angle: 3*Math.PI/4 },
+  { id: 'foxmq-4', label: 'FoxMQ-4', angle: -3*Math.PI/4 },
+];
+
+// State
+let time = 0, paused = false, chaosInjected = false, chaosTime = 0;
+let particles = [], messages = [], heartbeats = [];
+let agentStates = {};
+let metrics = { orders: 0, messages: 0, escrow: 0, burned: 0, rep: 0.5 };
+let currentPhase = 0, phaseTimer = 0;
+let deadAgent = null, recoveryPhase = false;
+
+// Phases of the demo
+const PHASES = [
+  { name: 'DISCOVERY', desc: 'Agents announcing capabilities via BFT-ordered MQTT...', duration: 400 },
+  { name: 'MARKET BROADCAST', desc: 'Oracle publishing market prices and demand forecasts...', duration: 350 },
+  { name: 'ORDER REQUEST', desc: 'Buyer publishes purchase order: 50x laptop displays @ $120 max...', duration: 350 },
+  { name: 'BIDDING', desc: 'Suppliers evaluating order and submitting competitive bids...', duration: 400 },
+  { name: 'NEGOTIATION', desc: 'Multi-round counter-offers using Adaptive strategy...', duration: 500 },
+  { name: 'ESCROW LOCK', desc: 'Buyer locking 5,400 MESH_CREDIT in escrow...', duration: 300 },
+  { name: 'FULFILLMENT', desc: 'Supplier A fulfilling order, Logistics shipping...', duration: 500 },
+  { name: 'INSPECTION', desc: 'Inspector verifying quality: score 0.94 (pass)...', duration: 350 },
+  { name: 'SETTLEMENT', desc: 'Escrow released: 92% supplier, 3% logistics, 2% inspector, 3% burned...', duration: 400 },
+  { name: 'SELF-HEALING', desc: 'Supplier A crash detected! Quorum confirming failure...', duration: 500 },
+  { name: 'REDISTRIBUTION', desc: 'Longest-uptime peer reassigning orders to Supplier B...', duration: 400 },
+  { name: 'RECOVERY', desc: 'Supplier A rejoining at 50% capacity for 2 epochs...', duration: 500 },
+  { name: 'CYCLE COMPLETE', desc: 'Full supply chain lifecycle demonstrated.', duration: 600 },
+];
+
+ROLES.forEach(r => agentStates[r.id] = { alive: true, pulse: 0, glow: 0, state: 'ACTIVE' });
+agentStates.oracle = { alive: true, pulse: 0, glow: 0, state: 'ACTIVE' };
+
+function getAgentPos(agent, t) {
+  const ringR = Math.min(W, H) * 0.3;
+  if (agent.role === 'oracle') {
+    return { x: cx, y: cy - ringR * 0.3 };
+  }
+  const x = cx + Math.cos(agent.angle) * ringR;
+  const y = cy + Math.sin(agent.angle) * ringR;
+  return { x, y };
+}
+
+function getFoxmqPos(node) {
+  const r = Math.min(W, H) * 0.12;
+  return { x: cx + Math.cos(node.angle) * r, y: cy + Math.sin(node.angle) * r };
+}
+
+function color(role) { return COLORS[role] || COLORS.buyer; }
+
+function addMessage(from, to, col, label) {
+  const fp = typeof from === 'string' ? getAgentPos(findAgent(from), time) : from;
+  const tp = typeof to === 'string' ? getAgentPos(findAgent(to), time) : to;
+  if (!fp || !tp) return;
+  messages.push({ fx: fp.x, fy: fp.y, tx: tp.x, ty: tp.y, t: 0, color: col || COLORS.msgDefault, label: label || '', life: 1 });
+  metrics.messages++;
+}
+
+function findAgent(id) {
+  if (id === 'oracle') return ORACLE;
+  return ROLES.find(r => r.id === id) || FOXMQ_NODES.find(f => f.id === id);
+}
+
+function addLog(msg, highlight) {
+  const el = document.getElementById('event-log');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (highlight ? ' highlight' : '');
+  const ts = (time / 60).toFixed(1);
+  line.innerHTML = `<span class="ts">[${ts}s]</span> <span class="msg">${msg}</span>`;
+  el.appendChild(line);
+  while (el.children.length > 12) el.removeChild(el.firstChild);
+}
+
+// Particle background
+function spawnParticle() {
+  particles.push({
+    x: Math.random() * W, y: Math.random() * H,
+    vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+    life: 200 + Math.random() * 300, maxLife: 200 + Math.random() * 300,
+    size: 1 + Math.random() * 1.5
+  });
+}
+for (let i = 0; i < 60; i++) spawnParticle();
+
+function drawGrid() {
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 1;
+  const step = 60;
+  for (let x = 0; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+}
+
+function drawFoxmqCluster() {
+  // Draw connections between nodes
+  ctx.strokeStyle = 'rgba(71,85,105,0.3)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < FOXMQ_NODES.length; i++) {
+    for (let j = i + 1; j < FOXMQ_NODES.length; j++) {
+      const a = getFoxmqPos(FOXMQ_NODES[i]);
+      const b = getFoxmqPos(FOXMQ_NODES[j]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+  }
+  // Draw nodes
+  FOXMQ_NODES.forEach(node => {
+    const p = getFoxmqPos(node);
+    // Glow
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 25);
+    g.addColorStop(0, 'rgba(71,85,105,0.15)');
+    g.addColorStop(1, 'rgba(71,85,105,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 25, 0, Math.PI * 2); ctx.fill();
+    // Node
+    ctx.fillStyle = COLORS.foxmq;
+    ctx.strokeStyle = COLORS.foxmqBorder;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Label
+    ctx.fillStyle = '#64748b';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(node.label, p.x, p.y + 22);
+  });
+  // Center label
+  ctx.fillStyle = 'rgba(71,85,105,0.6)';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('BFT CLUSTER', cx, cy + Math.min(W,H)*0.12 + 18);
+}
+
+function drawAgent(agent, t) {
+  const p = getAgentPos(agent, t);
+  const c = color(agent.role);
+  const st = agentStates[agent.id];
+  if (!st) return;
+
+  // Connection line to nearest foxmq
+  let nearest = FOXMQ_NODES[0], nd = Infinity;
+  FOXMQ_NODES.forEach(f => {
+    const fp = getFoxmqPos(f);
+    const d = Math.hypot(fp.x - p.x, fp.y - p.y);
+    if (d < nd) { nd = d; nearest = f; }
+  });
+  const fp = getFoxmqPos(nearest);
+  ctx.strokeStyle = st.alive ? `rgba(${hexToRgb(c)},0.15)` : 'rgba(255,50,50,0.1)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(fp.x, fp.y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Pulse ring
+  if (st.alive) {
+    const pulseR = 20 + (st.pulse % 60) * 0.5;
+    const pulseA = 1 - (st.pulse % 60) / 60;
+    ctx.strokeStyle = `rgba(${hexToRgb(c)},${pulseA * 0.3})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, pulseR, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // Glow
+  const glowR = 35 + st.glow * 10;
+  const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowR);
+  grd.addColorStop(0, st.alive ? `rgba(${hexToRgb(c)},${0.15 + st.glow * 0.15})` : 'rgba(255,50,50,0.1)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2); ctx.fill();
+
+  // Agent circle
+  ctx.fillStyle = st.alive ? c : '#991b1b';
+  ctx.strokeStyle = st.alive ? c : '#dc2626';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = st.alive ? 1 : 0.4 + 0.2 * Math.sin(t * 0.05);
+  ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Inner icon (simplified)
+  ctx.fillStyle = '#0a0e1a';
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const icons = { buyer: 'B', supplier: 'S', logistics: 'L', inspector: 'I', oracle: 'O' };
+  ctx.fillText(icons[agent.role] || '?', p.x, p.y);
+
+  // Label
+  ctx.fillStyle = st.alive ? c : '#dc2626';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(agent.label, p.x, p.y + 30);
+
+  // State badge
+  ctx.font = '9px monospace';
+  ctx.fillStyle = st.state === 'DEAD' ? '#dc2626' : st.state === 'REJOINING' ? '#eab308' : '#64748b';
+  ctx.fillText(st.state, p.x, p.y + 42);
+
+  st.pulse++;
+  if (st.glow > 0) st.glow *= 0.97;
+}
+
+function drawMessages(t) {
+  messages.forEach(m => {
+    const p = m.t;
+    const x = m.fx + (m.tx - m.fx) * p;
+    const y = m.fy + (m.ty - m.fy) * p;
+
+    // Trail
+    const trailLen = 0.15;
+    const startP = Math.max(0, p - trailLen);
+    const sx = m.fx + (m.tx - m.fx) * startP;
+    const sy = m.fy + (m.ty - m.fy) * startP;
+    const grad = ctx.createLinearGradient(sx, sy, x, y);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, m.color);
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(x, y); ctx.stroke();
+
+    // Head
+    const grd = ctx.createRadialGradient(x, y, 0, x, y, 8);
+    grd.addColorStop(0, m.color);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = m.color;
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+
+    // Label
+    if (m.label && p > 0.3 && p < 0.8) {
+      ctx.fillStyle = m.color;
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = Math.min(1, (p - 0.3) * 5) * Math.min(1, (0.8 - p) * 5);
+      ctx.fillText(m.label, x, y - 12);
+      ctx.globalAlpha = 1;
+    }
+
+    m.t += 0.012;
+  });
+  messages = messages.filter(m => m.t <= 1);
+}
+
+function drawHeartbeats() {
+  heartbeats.forEach(h => {
+    ctx.strokeStyle = `rgba(${hexToRgb(h.color)},${(1 - h.t) * 0.3})`;
+    ctx.lineWidth = 1;
+    const r = 16 + h.t * 30;
+    ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, Math.PI * 2); ctx.stroke();
+    h.t += 0.02;
+  });
+  heartbeats = heartbeats.filter(h => h.t < 1);
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.life--;
+    if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+    if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+    const a = Math.min(1, p.life / 50) * 0.3;
+    ctx.fillStyle = `rgba(0,240,255,${a})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+  });
+  particles = particles.filter(p => p.life > 0);
+  while (particles.length < 60) spawnParticle();
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r},${g},${b}`;
+}
+
+// Phase scripting
+function runPhaseLogic() {
+  const phase = PHASES[currentPhase];
+  if (!phase) return;
+
+  const pt = phaseTimer;
+
+  if (currentPhase === 0) { // Discovery
+    if (pt === 10) { addLog('buyer: DiscoveryAnnounce [role=buyer, caps=procurement]'); flash('buyer'); sendToCluster('buyer'); }
+    if (pt === 40) { addLog('supplier_a: DiscoveryAnnounce [role=supplier, caps=electronics]'); flash('supplier_a'); sendToCluster('supplier_a'); }
+    if (pt === 70) { addLog('supplier_b: DiscoveryAnnounce [role=supplier, caps=electronics]'); flash('supplier_b'); sendToCluster('supplier_b'); }
+    if (pt === 100) { addLog('logistics: DiscoveryAnnounce [role=logistics, caps=shipping]'); flash('logistics'); sendToCluster('logistics'); }
+    if (pt === 130) { addLog('inspector: DiscoveryAnnounce [role=inspector, caps=quality]'); flash('inspector'); sendToCluster('inspector'); }
+    if (pt % 60 === 0 && pt > 0) emitHeartbeats();
+  }
+  if (currentPhase === 1) { // Oracle
+    if (pt === 20) { addLog('oracle: MarketPriceUpdate [displays=$105/unit, batteries=$42/unit]', true); flash('oracle'); }
+    if (pt === 40) sendFromOracle('buyer', '#eab308', 'PRICES');
+    if (pt === 60) sendFromOracle('supplier_a', '#eab308', 'PRICES');
+    if (pt === 80) sendFromOracle('supplier_b', '#eab308', 'PRICES');
+    if (pt === 100) { addLog('oracle: MarketDemand [displays=HIGH, batteries=MED]'); }
+    if (pt === 120) sendFromOracle('buyer', '#eab308', 'DEMAND');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 2) { // Order Request
+    if (pt === 20) { addLog('buyer: PurchaseOrderRequest [50x laptop_display, max=$120/unit]', true); flash('buyer'); }
+    if (pt === 50) addMessage('buyer', 'supplier_a', COLORS.buyer, 'ORDER REQ');
+    if (pt === 70) addMessage('buyer', 'supplier_b', COLORS.buyer, 'ORDER REQ');
+    if (pt === 100) { addLog('mesh/orders/ord_001/request published via FoxMQ BFT'); }
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 3) { // Bidding
+    if (pt === 30) { addLog('supplier_a: SupplierBid [$108/unit, lead=3 days, confidence=0.92]'); flash('supplier_a'); }
+    if (pt === 60) addMessage('supplier_a', 'buyer', COLORS.supplier, 'BID $108');
+    if (pt === 100) { addLog('supplier_b: SupplierBid [$112/unit, lead=4 days, confidence=0.87]'); flash('supplier_b'); }
+    if (pt === 130) addMessage('supplier_b', 'buyer', COLORS.supplier, 'BID $112');
+    if (pt === 180) { addLog('buyer: evaluate_bids() -- scoring price(35%) rep(30%) speed(20%) conf(15%)'); flash('buyer'); }
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 4) { // Negotiation
+    if (pt === 30) { addLog('buyer: CounterOffer to supplier_a [$102/unit] (Adaptive strategy)'); flash('buyer'); }
+    if (pt === 60) addMessage('buyer', 'supplier_a', '#ff6b3d', 'COUNTER $102');
+    if (pt === 120) { addLog('supplier_a: CounterOffer [$106/unit] (round 2/3)'); flash('supplier_a'); }
+    if (pt === 150) addMessage('supplier_a', 'buyer', COLORS.supplier, 'COUNTER $106');
+    if (pt === 220) { addLog('buyer: CounterOffer [$104/unit] (round 3/3, final)'); flash('buyer'); }
+    if (pt === 250) addMessage('buyer', 'supplier_a', '#ff6b3d', 'COUNTER $104');
+    if (pt === 320) { addLog('supplier_a: BidAcceptance [$104/unit] -- deal!', true); flash('supplier_a'); }
+    if (pt === 350) addMessage('supplier_a', 'buyer', '#22c55e', 'ACCEPTED');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 5) { // Escrow
+    if (pt === 20) { addLog('buyer: escrow_lock(ord_001, 5200 MESH_CREDIT)', true); flash('buyer'); metrics.escrow = 5200; }
+    if (pt === 50) addMessage('buyer', 'supplier_a', '#eab308', 'ESCROW LOCK');
+    if (pt === 80) { addLog('supplier_a: OrderCommit [will fulfill 50x laptop_display]'); flash('supplier_a'); }
+    if (pt === 110) addMessage('supplier_a', 'buyer', '#22c55e', 'COMMITTED');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 6) { // Fulfillment
+    if (pt === 20) { addLog('buyer: ShippingRequest [50x displays, pickup=supplier_a]'); flash('buyer'); }
+    if (pt === 50) addMessage('buyer', 'logistics', COLORS.buyer, 'SHIP REQ');
+    if (pt === 100) { addLog('logistics: ShippingBid [$3.20/unit, est_delivery=2 days]'); flash('logistics'); }
+    if (pt === 130) addMessage('logistics', 'buyer', COLORS.logistics, 'SHIP BID');
+    if (pt === 180) { addLog('logistics: TransitUpdate [status=PICKED_UP]'); flash('logistics'); }
+    if (pt === 200) addMessage('logistics', 'supplier_a', COLORS.logistics, 'PICKUP');
+    if (pt === 280) { addLog('logistics: TransitUpdate [status=IN_TRANSIT, progress=65%]'); }
+    if (pt === 300) addMessage('logistics', 'buyer', COLORS.logistics, 'IN TRANSIT');
+    if (pt === 380) { addLog('logistics: TransitUpdate [status=DELIVERED]', true); flash('logistics'); }
+    if (pt === 400) addMessage('logistics', 'inspector', COLORS.logistics, 'DELIVERED');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 7) { // Inspection
+    if (pt === 20) { addLog('buyer: InspectionRequest [ord_001, threshold=0.85]'); flash('buyer'); }
+    if (pt === 50) addMessage('buyer', 'inspector', COLORS.buyer, 'INSPECT REQ');
+    if (pt === 120) { addLog('inspector: InspectionReport [quality=0.94, defects=3/50, PASS]', true); flash('inspector'); }
+    if (pt === 150) addMessage('inspector', 'buyer', COLORS.inspector, 'PASS 0.94');
+    if (pt === 200) addMessage('inspector', 'supplier_a', COLORS.inspector, 'REPORT');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 8) { // Settlement
+    if (pt === 20) { addLog('arbiter: quality >= threshold, no disputes'); }
+    if (pt === 60) { addLog('ledger: escrow_release -- supplier_a: 4784 (92%)', true); flash('supplier_a'); }
+    if (pt === 80) addMessage('buyer', 'supplier_a', '#22c55e', '4784 MC');
+    if (pt === 120) { addLog('ledger: escrow_release -- logistics: 156 (3%)'); flash('logistics'); }
+    if (pt === 140) addMessage('buyer', 'logistics', '#22c55e', '156 MC');
+    if (pt === 180) { addLog('ledger: escrow_release -- inspector: 104 (2%)'); flash('inspector'); }
+    if (pt === 200) addMessage('buyer', 'inspector', '#22c55e', '104 MC');
+    if (pt === 240) { addLog('ledger: burned 156 MESH_CREDIT (3% deflationary)'); metrics.burned = 156; metrics.orders = 1; metrics.escrow = 0; metrics.rep = 0.55; }
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 9) { // Self-healing
+    if (pt === 30) { addLog('supplier_a: HEARTBEAT MISSED (1/3)'); }
+    if (pt === 80) { addLog('supplier_a: HEARTBEAT MISSED (2/3)'); }
+    if (pt === 130) { addLog('supplier_a: HEARTBEAT MISSED (3/3) --> SUSPECT', true); agentStates.supplier_a.state = 'SUSPECT'; }
+    if (pt === 200) { addLog('buyer: HealthAlert [supplier_a SUSPECT --> critical]'); flash('buyer'); }
+    if (pt === 220) addMessage('buyer', 'logistics', '#dc2626', 'HEALTH ALERT');
+    if (pt === 250) { addLog('inspector: HealthAlert [supplier_a SUSPECT --> critical]'); flash('inspector'); }
+    if (pt === 270) addMessage('inspector', 'logistics', '#dc2626', 'HEALTH ALERT');
+    if (pt === 320) { addLog('QUORUM REACHED: 2 agents confirm supplier_a DEAD', true); agentStates.supplier_a.state = 'DEAD'; agentStates.supplier_a.alive = false; deadAgent = 'supplier_a'; }
+    if (pt % 80 === 0 && pt < 130) emitHeartbeats();
+  }
+  if (currentPhase === 10) { // Redistribution
+    if (pt === 30) { addLog('logistics (coordinator): computing role redistribution...'); flash('logistics'); }
+    if (pt === 80) { addLog('RoleRedistribution: supplier_b takes supplier_a pending orders', true); flash('supplier_b'); }
+    if (pt === 100) addMessage('logistics', 'supplier_b', COLORS.logistics, 'REASSIGN');
+    if (pt === 150) addMessage('logistics', 'buyer', COLORS.logistics, 'REDISTRIB');
+    if (pt === 200) { addLog('supplier_b: accepting redistributed orders [caps=electronics]'); flash('supplier_b'); }
+    if (pt === 230) addMessage('supplier_b', 'buyer', COLORS.supplier, 'READY');
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 11) { // Recovery
+    if (pt === 30) { addLog('supplier_a: reconnecting to FoxMQ cluster...'); }
+    if (pt === 80) { addLog('supplier_a: DiscoveryAnnounce [status=REJOINING]', true); agentStates.supplier_a.alive = true; agentStates.supplier_a.state = 'REJOINING'; deadAgent = null; }
+    if (pt === 100) sendToCluster('supplier_a');
+    if (pt === 160) { addLog('recovery: supplier_a limited to 50% capacity (epoch 1/2)'); }
+    if (pt === 250) { addLog('recovery: supplier_a limited to 50% capacity (epoch 2/2)'); }
+    if (pt === 350) { addLog('supplier_a: promoted to ACTIVE (full capacity)', true); agentStates.supplier_a.state = 'ACTIVE'; metrics.rep = 0.52; }
+    if (pt % 80 === 0) emitHeartbeats();
+  }
+  if (currentPhase === 12) { // Complete
+    if (pt === 20) { addLog('MESH: Full decentralized supply chain lifecycle demonstrated', true); metrics.orders = 1; metrics.rep = 0.55; }
+    if (pt % 60 === 0) emitHeartbeats();
+    // Loop
+    if (pt === phase.duration - 10) {
+      currentPhase = 0; phaseTimer = -1;
+      metrics = { orders: 0, messages: 0, escrow: 0, burned: 0, rep: 0.5 };
+      ROLES.forEach(r => { agentStates[r.id].alive = true; agentStates[r.id].state = 'ACTIVE'; });
+      agentStates.oracle.state = 'ACTIVE';
+      deadAgent = null;
+      document.getElementById('event-log').innerHTML = '';
+    }
+  }
+
+  phaseTimer++;
+  if (phaseTimer >= phase.duration) {
+    currentPhase++;
+    phaseTimer = 0;
+    if (currentPhase < PHASES.length) {
+      document.getElementById('phase-text').textContent = PHASES[currentPhase].name;
+      document.getElementById('phase-desc').textContent = PHASES[currentPhase].desc;
+    }
+  }
+}
+
+function flash(id) {
+  if (agentStates[id]) agentStates[id].glow = 1;
+}
+
+function sendToCluster(agentId) {
+  const agent = findAgent(agentId);
+  if (!agent) return;
+  const p = getAgentPos(agent, time);
+  // Find nearest foxmq
+  let nearest = FOXMQ_NODES[0], nd = Infinity;
+  FOXMQ_NODES.forEach(f => {
+    const fp = getFoxmqPos(f);
+    const d = Math.hypot(fp.x - p.x, fp.y - p.y);
+    if (d < nd) { nd = d; nearest = f; }
+  });
+  const fp = getFoxmqPos(nearest);
+  messages.push({ fx: p.x, fy: p.y, tx: fp.x, ty: fp.y, t: 0, color: color(agent.role), label: 'ANNOUNCE', life: 1 });
+  metrics.messages++;
+}
+
+function sendFromOracle(targetId, col, label) {
+  addMessage('oracle', targetId, col, label);
+}
+
+function emitHeartbeats() {
+  ROLES.forEach(r => {
+    if (!agentStates[r.id].alive) return;
+    const p = getAgentPos(r, time);
+    heartbeats.push({ x: p.x, y: p.y, t: 0, color: color(r.role) });
+  });
+  const op = getAgentPos(ORACLE, time);
+  heartbeats.push({ x: op.x, y: op.y, t: 0, color: COLORS.oracle });
+}
+
+// Chaos button
+function injectChaos() {
+  if (chaosInjected) return;
+  chaosInjected = true;
+  currentPhase = 9;
+  phaseTimer = 0;
+  document.getElementById('phase-text').textContent = PHASES[9].name;
+  document.getElementById('phase-desc').textContent = PHASES[9].desc;
+  addLog('CHAOS INJECTED: Killing supplier_a...', true);
+}
+
+// Update metrics display
+function updateMetricsUI() {
+  document.getElementById('m-orders').textContent = metrics.orders;
+  document.getElementById('m-messages').textContent = metrics.messages;
+  document.getElementById('m-escrow').textContent = metrics.escrow.toLocaleString();
+  document.getElementById('m-burned').textContent = metrics.burned;
+  document.getElementById('m-rep').textContent = metrics.rep.toFixed(2);
+}
+
+// Main loop
+function frame() {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, W, H);
+  drawGrid();
+  drawParticles();
+  drawFoxmqCluster();
+
+  // Draw oracle
+  drawAgent(ORACLE, time);
+  // Draw agents
+  ROLES.forEach(r => drawAgent(r, time));
+
+  drawMessages(time);
+  drawHeartbeats();
+
+  if (!paused) {
+    runPhaseLogic();
+    time++;
+  }
+
+  updateMetricsUI();
+  requestAnimationFrame(frame);
+}
+
+// Controls
+document.getElementById('btn-play').addEventListener('click', () => { paused = false; document.getElementById('btn-play').classList.add('active'); document.getElementById('btn-pause').classList.remove('active'); });
+document.getElementById('btn-pause').addEventListener('click', () => { paused = true; document.getElementById('btn-pause').classList.add('active'); document.getElementById('btn-play').classList.remove('active'); });
+document.getElementById('btn-chaos').addEventListener('click', injectChaos);
+document.getElementById('btn-reset').addEventListener('click', () => {
+  time = 0; currentPhase = 0; phaseTimer = 0; paused = false; chaosInjected = false;
+  messages = []; heartbeats = [];
+  metrics = { orders: 0, messages: 0, escrow: 0, burned: 0, rep: 0.5 };
+  ROLES.forEach(r => { agentStates[r.id] = { alive: true, pulse: 0, glow: 0, state: 'ACTIVE' }; });
+  agentStates.oracle = { alive: true, pulse: 0, glow: 0, state: 'ACTIVE' };
+  deadAgent = null;
+  document.getElementById('event-log').innerHTML = '';
+  document.getElementById('phase-text').textContent = PHASES[0].name;
+  document.getElementById('phase-desc').textContent = PHASES[0].desc;
+  document.getElementById('btn-play').classList.add('active');
+  document.getElementById('btn-pause').classList.remove('active');
+});
+
+// Init
+document.getElementById('phase-text').textContent = PHASES[0].name;
+document.getElementById('phase-desc').textContent = PHASES[0].desc;
+frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+---
+title: Quickstart
+subtitle: Connect your first agent to the mesh in 5 minutes
+slug: quickstart
+---
+
+## Prerequisites
+
+- Node.js 18 or later
+- An AgentMesh account at [agentmesh.world](https://agentmesh.world)
+
+## 1. Install the SDK
+
+<CodeBlocks>
+```bash npm
+npm install @agentmeshworld/sdk
+```
+```bash pnpm
+pnpm add @agentmeshworld/sdk
+```
+```bash yarn
+yarn add @agentmeshworld/sdk
+```
+</CodeBlocks>
+
+## 2. Get an API Key
+
+1. Sign up at [agentmesh.world](https://agentmesh.world)
+2. Create a workspace from the [dashboard](https://agentmesh.world/dashboard)
+3. Navigate to **Settings > API Keys**
+4. Click **Create API Key** -- you'll receive a key prefixed with `amk_`
+
+## 3. Connect Your First Agent
+
+Create a file `my-agent.ts`:
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: "amk_your_api_key_here",
+  role: "buyer",
+  capabilities: ["electronics", "semiconductors"],
+});
+
+// Connect to the mesh
+const { agentId, workspace } = await agent.connect();
+console.log(`Connected as ${agentId} in workspace ${workspace}`);
+
+// Subscribe to order events
+agent.subscribe(["order:request", "order:bid", "order:status"]);
+
+// Listen for incoming messages
+agent.on("message", ({ topic, payload }) => {
+  console.log(`[${topic}]`, payload);
+});
+
+// Publish a purchase order
+agent.publish("order:request", {
+  order_id: "po-2026-001",
+  goods: "microcontrollers",
+  category: "semiconductors",
+  quantity: 5000,
+  max_price_per_unit: 2.50,
+  quality_threshold: 0.95,
+  delivery_deadline_seconds: 3600,
+});
+```
+
+Run it:
+
+```bash
+npx tsx my-agent.ts
+```
+
+## 4. Verify the Connection
+
+You should see output like:
+
+```
+Connected as a3f8c2e1b9d04a7c in workspace my-company
+```
+
+Your agent is now live on the mesh, listening for bids and status updates.
+
+## Using the CLI Instead
+
+If you prefer the terminal, you can connect agents without writing any code:
+
+```bash
+# Install globally
+npm install -g @agentmeshworld/sdk
+
+# Connect as a buyer
+agentmesh connect --key amk_your_key --role buyer --sub order:bid,order:status
+```
+
+See the [CLI Quickstart](/docs/tutorials/cli-quickstart) tutorial for more.
+
+## What's Next?
+
+- [Build a Buyer Agent](/docs/tutorials/buyer-agent) -- full tutorial with bid evaluation logic
+- [Build a Supplier Agent](/docs/tutorials/supplier-agent) -- respond to purchase orders automatically
+- [Concepts](/docs/concepts) -- understand agents, workspaces, topics, and credits
+- [API Reference](/api/rest) -- explore the REST API

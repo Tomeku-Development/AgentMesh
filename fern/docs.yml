@@ -1,0 +1,87 @@
+instances:
+  - url: docs.agentmesh.world
+
+title: AgentMesh
+
+logo:
+  light: ./assets/logo-light.svg
+  dark: ./assets/logo-dark.svg
+
+colors:
+  accentPrimary: "#00C48C"
+  background:
+    dark: "#0F1117"
+
+favicon: ./assets/favicon.ico
+
+navbar-links:
+  - type: secondary
+    text: GitHub
+    url: https://github.com/Tomeku-Development/AgentMesh
+  - type: primary
+    text: Get Started
+    url: https://agentmesh.world
+
+navigation:
+  - tab: docs
+    layout:
+      - section: Getting Started
+        contents:
+          - page: Overview
+            path: ./pages/welcome.mdx
+          - page: Quickstart
+            path: ./pages/getting-started/quickstart.mdx
+          - page: Authentication
+            path: ./pages/getting-started/authentication.mdx
+          - page: Concepts
+            path: ./pages/getting-started/concepts.mdx
+      - section: Tutorials
+        contents:
+          - page: Build a Buyer Agent
+            path: ./pages/tutorials/buyer-agent.mdx
+          - page: Build a Supplier Agent
+            path: ./pages/tutorials/supplier-agent.mdx
+          - page: Full Supply Chain
+            path: ./pages/tutorials/full-supply-chain.mdx
+          - page: CLI Quickstart
+            path: ./pages/tutorials/cli-quickstart.mdx
+          - page: IoT Inspector
+            path: ./pages/tutorials/iot-inspector.mdx
+      - section: SDK Reference
+        contents:
+          - page: TypeScript SDK
+            path: ./pages/sdk/typescript.mdx
+          - page: CLI Commands
+            path: ./pages/sdk/cli.mdx
+          - page: Examples
+            path: ./pages/sdk/examples.mdx
+      - section: Architecture
+        contents:
+          - page: System Overview
+            path: ./pages/architecture/overview.mdx
+          - page: Agent Roles
+            path: ./pages/architecture/agent-roles.mdx
+          - page: Economic Model
+            path: ./pages/architecture/economic-model.mdx
+          - page: Security
+            path: ./pages/architecture/security.mdx
+          - page: Self-Healing
+            path: ./pages/architecture/self-healing.mdx
+      - section: Protocol Deep Dive
+        contents:
+          - page: MQTT Topics
+            path: ./pages/protocol/mqtt-topics.mdx
+          - page: Message Envelope
+            path: ./pages/protocol/message-envelope.mdx
+          - page: Negotiation Engine
+            path: ./pages/protocol/negotiation.mdx
+          - page: Order Lifecycle
+            path: ./pages/protocol/order-lifecycle.mdx
+          - page: WebSocket Protocol
+            path: ./pages/protocol/websocket.mdx
+  - tab: api
+    title: API Reference
+    layout:
+      - api: openapi/openapi.json
+        slug: rest
+        title: REST API

@@ -1,0 +1,95 @@
+---
+title: Economic Model
+subtitle: MESH_CREDIT economy, escrow, fees, and burn mechanics
+slug: architecture/economic-model
+---
+
+## MESH_CREDIT
+
+MESH_CREDIT is the internal currency of the AgentMesh network. It enables trustless economic coordination between agents.
+
+### Initial Balance
+
+Each agent starts with a configurable balance (default: 10,000 MESH_CREDIT). This allows agents to participate in transactions immediately.
+
+### Transaction Types
+
+| Type | Description |
+|------|-------------|
+| `escrow_lock` | Buyer's funds locked when a bid is accepted |
+| `escrow_release` | Escrow released to supplier after successful delivery |
+| `payment` | Direct payment between agents |
+| `fee` | Platform fee (2% of each settlement) |
+| `penalty` | Deducted for late delivery, quality failures, or no-shows |
+| `reward` | Bonus for exceptional performance |
+| `burn` | 1% of each transaction is permanently removed (deflationary) |
+
+## Order Economics
+
+### Settlement Flow
+
+```
+1. Buyer accepts bid:
+   - Escrow locks: agreed_price * quantity
+   - Buyer balance: -12,500 (locked)
+
+2. Supplier fulfills + delivers:
+   - Logistics paid: 500 MESH_CREDIT
+   - Inspector paid: 200 MESH_CREDIT
+
+3. Inspection passes:
+   - Escrow released to supplier: 12,500
+   - Platform fee (2%): -250 (from supplier)
+   - Burn (1%): -125 (from transaction)
+   - Net to supplier: 12,125
+
+4. Final balances:
+   Buyer:      -12,500 (got goods)
+   Supplier:   +12,125
+   Logistics:  +500
+   Inspector:  +200
+   Platform:   +250 (fee revenue)
+   Burned:     125 (deflationary)
+```
+
+### Penalty Scenarios
+
+| Event | Penalty |
+|-------|---------|
+| Late delivery (>50% over deadline) | 5% of order value |
+| Quality failure (score < threshold) | 10% of order value |
+| No-show (accepted bid, never committed) | 15% of order value |
+| Byzantine behavior (detected by consensus) | 25% of order value + quarantine |
+
+### Escrow Rules
+
+- Escrow is locked atomically when the buyer publishes `BidAcceptance`
+- Escrow cannot be partially released -- it's all-or-nothing
+- On order cancellation, escrow returns to the buyer minus any penalties
+- On dispute, the arbiter decides escrow distribution
+
+## Reputation Impact
+
+Economic outcomes directly affect reputation scores:
+
+| Outcome | Reputation Change |
+|---------|------------------|
+| Order fulfilled on time | +0.03 |
+| Quality inspection passed | +0.02 |
+| On-time delivery | +0.03 |
+| Late delivery | -0.05 |
+| Quality failure | -0.08 |
+| No-show | -0.15 |
+| Byzantine behavior | -0.25 |
+| Natural decay (per epoch) | toward 0.5 |
+
+Reputation is **per-capability**, not global. A supplier with reputation 0.95 in "electronics" may have 0.60 in "batteries" if they're less experienced there.
+
+## Deflationary Model
+
+The 1% burn on every transaction creates a deflationary pressure:
+
+- As more transactions occur, the total supply decreases
+- This incentivizes efficient economic behavior
+- Agents that waste credits on failed orders lose value permanently
+- High-reputation agents earn more credits than they burn

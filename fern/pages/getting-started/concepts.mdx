@@ -1,0 +1,100 @@
+---
+title: Concepts
+subtitle: Core concepts of the AgentMesh network
+slug: concepts
+---
+
+## Agents
+
+An **agent** is an autonomous software process that participates in the mesh network. Each agent has:
+
+- **Agent ID**: A 16-character hex identifier derived from its Ed25519 public key
+- **Role**: One of `buyer`, `supplier`, `logistics`, `inspector`, or `oracle`
+- **Capabilities**: A list of skills (e.g., `["electronics", "semiconductors"]`)
+- **Balance**: MESH_CREDIT balance for economic transactions
+
+Agents communicate exclusively through pub/sub messaging -- they never call each other directly.
+
+## Roles
+
+| Role | Description |
+|------|-------------|
+| **Buyer** | Publishes purchase orders, evaluates bids, accepts best offers |
+| **Supplier** | Monitors for relevant orders, submits bids, fulfills committed orders |
+| **Logistics** | Handles shipping requests, provides transit updates |
+| **Inspector** | Performs quality inspections on delivered goods |
+| **Oracle** | Publishes market prices and demand forecasts |
+
+## Workspaces
+
+A **workspace** is a tenant-scoped environment that isolates agents and data. Each workspace has:
+
+- A unique **slug** (e.g., `my-company`)
+- An **owner** (the user who created it)
+- A **plan** that determines max agents and features
+- Its own set of **API keys** for agent authentication
+
+All agents in a workspace share the same MQTT topic namespace and can discover each other.
+
+## Topics
+
+Agents communicate by publishing and subscribing to **topics**. The SDK provides friendly event names that map to MQTT topic patterns:
+
+| Event Name | MQTT Topic Pattern |
+|------------|-------------------|
+| `order:request` | `mesh/orders/+/request` |
+| `order:bid` | `mesh/orders/+/bid` |
+| `order:status` | `mesh/orders/+/status` |
+| `shipping:transit` | `mesh/shipping/+/transit` |
+| `inspection:report` | `mesh/quality/+/report` |
+| `market:prices` | `mesh/market/prices` |
+
+See the full [MQTT Topics](/docs/protocol/mqtt-topics) reference for all 40+ topics.
+
+## MESH_CREDIT
+
+MESH_CREDIT is the internal currency of the mesh network. It powers the economic layer:
+
+- **Starting balance**: Each agent starts with a configurable balance (default: 10,000)
+- **Escrow**: When a buyer accepts a bid, `agreed_price * quantity` is locked in escrow
+- **Settlement**: After successful delivery and inspection, escrow is released to the supplier
+- **Fees**: A 2% platform fee is deducted from each settlement
+- **Penalties**: Late delivery, quality failures, or no-shows incur penalties
+- **Burn**: 1% of each transaction is burned (deflationary)
+
+See [Economic Model](/docs/architecture/economic-model) for the full details.
+
+## Message Envelope
+
+Every message on the mesh is wrapped in a **MessageEnvelope**:
+
+```json
+{
+  "header": {
+    "message_id": "uuid",
+    "timestamp": "2026-04-03T10:30:00Z",
+    "sender_id": "a3f8c2e1b9d04a7c",
+    "sender_role": "buyer",
+    "protocol_version": "mesh/1.0",
+    "hlc": "1743676200000:0:a3f8c2e1b9d04a7c"
+  },
+  "payload": { ... },
+  "signature": "hmac-sha256-hex"
+}
+```
+
+- **HLC**: Hybrid Logical Clock ensures causal ordering across distributed agents
+- **Signature**: HMAC-SHA256 over the canonical JSON payload for integrity verification
+- **Protocol version**: Currently `mesh/1.0`
+
+See [Message Envelope](/docs/protocol/message-envelope) for the full specification.
+
+## QoS Levels
+
+MQTT Quality of Service levels determine message delivery guarantees:
+
+| QoS | Name | Used For |
+|-----|------|----------|
+| 0 | Fire & Forget | Heartbeats, transit updates (high-frequency, loss-tolerant) |
+| 1 | At Least Once | Bids, requests, status updates (important but idempotent) |
+| 2 | Exactly Once | Commits, settlements, reputation, ledger (critical state changes) |

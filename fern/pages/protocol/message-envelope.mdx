@@ -1,0 +1,118 @@
+---
+title: Message Envelope
+subtitle: Envelope format, HMAC signing, and Hybrid Logical Clocks
+slug: protocol/message-envelope
+---
+
+## Envelope Structure
+
+Every message on the MESH network is wrapped in a `MessageEnvelope`:
+
+```json
+{
+  "header": {
+    "message_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "timestamp": "2026-04-03T10:30:00.000Z",
+    "sender_id": "a3f8c2e1b9d04a7c",
+    "sender_role": "buyer",
+    "protocol_version": "mesh/1.0",
+    "hlc": "1743676200000:0:a3f8c2e1b9d04a7c"
+  },
+  "payload": {
+    "order_id": "po-2026-001",
+    "goods": "microcontrollers",
+    "quantity": 5000
+  },
+  "signature": "f8a3b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+}
+```
+
+## Header Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message_id` | UUID | Unique identifier for deduplication |
+| `timestamp` | ISO 8601 | UTC timestamp of message creation |
+| `sender_id` | string | 16-char hex agent ID |
+| `sender_role` | enum | `buyer`, `supplier`, `logistics`, `inspector`, `oracle` |
+| `protocol_version` | string | Currently `mesh/1.0` |
+| `hlc` | string | Hybrid Logical Clock value |
+
+## Signature
+
+The signature is computed as:
+
+```
+signature = HMAC-SHA256(secret_key, canonical_json(payload))
+```
+
+Where `canonical_json` produces sorted keys with no extra whitespace:
+
+```python
+import json
+canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+```
+
+### Verification
+
+```python
+from mesh.core.protocol import verify_envelope
+
+is_valid = verify_envelope(envelope, secret_key)
+```
+
+If the signature doesn't match, the message is dropped silently.
+
+## Hybrid Logical Clock (HLC)
+
+HLC combines physical wall clock time with a logical counter to provide causal ordering:
+
+```
+Format: {physical_ms}:{logical}:{node_id}
+Example: 1743676200000:0:a3f8c2e1b9d04a7c
+```
+
+### HLC Rules
+
+1. **Local event**: `physical = max(physical, wall_clock)`, `logical = 0`
+2. **Send event**: Same as local event, then include HLC in message
+3. **Receive event**: `physical = max(local_physical, msg_physical, wall_clock)`
+   - If `physical` equals `msg_physical`: `logical = max(local_logical, msg_logical) + 1`
+   - Otherwise: `logical = 0`
+
+### Why HLC?
+
+- NTP clock drift can cause wall clocks to disagree
+- Logical clocks alone don't capture real time
+- HLC gives the best of both: causal ordering with real-time proximity
+- Combined with FoxMQ's total ordering, messages are fully deterministic
+
+## Building Envelopes
+
+```python
+from mesh.core.protocol import build_envelope
+from mesh.core.messages import PurchaseOrderRequest
+
+order = PurchaseOrderRequest(
+    goods="microcontrollers",
+    category="semiconductors",
+    quantity=5000,
+    max_price_per_unit=2.50,
+)
+
+envelope = build_envelope(
+    sender_id="a3f8c2e1b9d04a7c",
+    sender_role="buyer",
+    payload=order.model_dump(),
+    secret_key="mesh-vertex-swarm-2026",
+)
+```
+
+## Replay Detection
+
+Messages are subject to replay detection:
+
+- The `message_id` is tracked for a 30-second window
+- Duplicate `message_id` values are rejected
+- The `timestamp` must be within 30 seconds of the receiver's clock
+- This prevents both exact replays and delayed message injection

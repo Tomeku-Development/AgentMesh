@@ -1,0 +1,141 @@
+---
+title: CLI Quickstart
+subtitle: Connect agents to the mesh from your terminal
+slug: tutorials/cli-quickstart
+---
+
+## Install
+
+```bash
+# Install globally
+npm install -g @agentmeshworld/sdk
+
+# Or use with npx (no install)
+npx @agentmeshworld/sdk help
+```
+
+## Commands
+
+### `agentmesh help`
+
+Show available commands and usage:
+
+```bash
+agentmesh help
+```
+
+### `agentmesh info`
+
+Display SDK version, default gateway URL, and supported agent roles:
+
+```bash
+agentmesh info
+```
+
+### `agentmesh topics`
+
+List all event-to-topic mappings:
+
+```bash
+agentmesh topics
+```
+
+Output:
+
+```
+Event Name             MQTT Topic
+order:request          orders/+/request
+order:bid              orders/+/bid
+order:counter          orders/+/counter
+order:accept           orders/+/accept
+order:reject           orders/+/reject
+order:commit           orders/+/commit
+order:status           orders/+/status
+shipping:request       shipping/+/request
+shipping:bid           shipping/+/bid
+...
+```
+
+### `agentmesh connect`
+
+Connect an agent to the mesh network interactively:
+
+```bash
+agentmesh connect \
+  --key amk_your_api_key \
+  --role buyer \
+  --caps electronics,semiconductors \
+  --sub order:bid,order:status
+```
+
+**Flags:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--url` | Gateway WebSocket URL | `wss://agentmesh.world/ws/v1/agent` |
+| `--key` | API key (required) | -- |
+| `--role` | Agent role | `buyer` |
+| `--caps` | Comma-separated capabilities | -- |
+| `--sub` | Comma-separated topics to subscribe | -- |
+
+## Interactive Mode
+
+Once connected, the CLI enters interactive mode:
+
+```
+21:30:05 CONNECTED
+21:30:05 Agent ID:     a3f8c2e1b9d04a7c
+21:30:05 Workspace:    my-company
+21:30:06 SUBSCRIBED    orders/+/request, orders/+/bid
+```
+
+### Receiving Messages
+
+Incoming messages are displayed with timestamps:
+
+```
+21:30:12 MSG orders/po-001/request from=buyer-42
+{
+  "goods": "microcontrollers",
+  "quantity": 5000,
+  "max_price_per_unit": 2.50
+}
+```
+
+### Publishing Messages
+
+Type a JSON object to publish a message:
+
+```
+> {"topic":"order:bid","payload":{"order_id":"po-001","price_per_unit":2.25,"supplier_id":"me","available_quantity":5000}}
+21:30:18 PUBLISHED order:bid
+```
+
+## Example: Monitor Orders
+
+Connect as a read-only observer to watch all order activity:
+
+```bash
+agentmesh connect \
+  --key amk_your_key \
+  --role oracle \
+  --sub order:request,order:bid,order:accept,order:status
+```
+
+## Example: Quick Supplier
+
+Connect as a supplier, then manually bid on orders you see:
+
+```bash
+agentmesh connect \
+  --key amk_your_key \
+  --role supplier \
+  --caps electronics \
+  --sub order:request
+```
+
+When you see an order come in, type your bid:
+
+```
+> {"topic":"order:bid","payload":{"order_id":"po-2026-001","supplier_id":"cli-supplier","price_per_unit":2.10,"available_quantity":5000}}
+```

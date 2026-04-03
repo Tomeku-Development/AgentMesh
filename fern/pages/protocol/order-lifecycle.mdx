@@ -1,0 +1,141 @@
+---
+title: Order Lifecycle
+subtitle: The 7-phase flow from request to settlement
+slug: protocol/order-lifecycle
+---
+
+## Overview
+
+Every order in the MESH protocol progresses through 7 phases:
+
+```
+Phase 0: DISCOVER    (continuous)
+Phase 1: REQUEST     Buyer publishes purchase order
+Phase 2: BID         Suppliers submit competing bids
+Phase 3: NEGOTIATE   Multi-round counter-offers (max 3 rounds)
+Phase 4: COMMIT      Escrow lock + supplier commitment
+Phase 5: EXECUTE     Fulfillment + shipping + transit
+Phase 6: VERIFY      Quality inspection
+Phase 7: SETTLE      Escrow release + reputation updates
+```
+
+## Order Status States
+
+```
+open -> bidding -> negotiating -> committed -> fulfilling
+  -> shipping -> delivered -> inspecting -> settled
+
+At any point: -> cancelled | failed | recovering
+```
+
+| Status | Phase | Description |
+|--------|-------|-------------|
+| `open` | 1 | Purchase order published, waiting for bids |
+| `bidding` | 2 | Bids being received during bid window |
+| `negotiating` | 3 | Counter-offers in progress |
+| `committed` | 4 | Supplier committed, escrow locked |
+| `fulfilling` | 5 | Supplier preparing the order |
+| `shipping` | 5 | Goods in transit |
+| `delivered` | 5 | Goods delivered to destination |
+| `inspecting` | 6 | Quality inspection in progress |
+| `settled` | 7 | Payment complete, order finished |
+| `cancelled` | Any | Order cancelled (e.g., no bids received) |
+| `failed` | Any | Order failed (e.g., supplier disappeared) |
+| `recovering` | Any | Order being recovered after agent failure |
+
+## Phase 1: REQUEST
+
+The buyer publishes a `PurchaseOrderRequest`:
+
+```json
+{
+  "order_id": "po-2026-001",
+  "goods": "microcontrollers",
+  "category": "semiconductors",
+  "quantity": 5000,
+  "max_price_per_unit": 2.50,
+  "quality_threshold": 0.95,
+  "delivery_deadline_seconds": 3600,
+  "required_capabilities": ["electronics"],
+  "bid_deadline_seconds": 10
+}
+```
+
+**Topic**: `mesh/orders/{order_id}/request` (QoS 1)
+
+## Phase 2: BID
+
+Suppliers with matching capabilities submit bids:
+
+```json
+{
+  "order_id": "po-2026-001",
+  "bid_id": "uuid",
+  "supplier_id": "supplier-01",
+  "price_per_unit": 2.25,
+  "available_quantity": 5000,
+  "estimated_fulfillment_seconds": 30,
+  "reputation_score": 0.88
+}
+```
+
+**Topic**: `mesh/orders/{order_id}/bid` (QoS 1)
+
+The buyer collects bids until `bid_deadline_seconds` expires.
+
+## Phase 3: NEGOTIATE
+
+If the buyer wants to negotiate, they send a `CounterOffer`:
+
+- Max 3 rounds
+- Only price, quantity, and deadline are negotiable
+- Each counter-offer has an expiration
+
+See [Negotiation Engine](/docs/protocol/negotiation) for details.
+
+## Phase 4: COMMIT
+
+The buyer accepts the best bid:
+
+1. `BidAcceptance` published -> escrow locks `agreed_price * quantity`
+2. Supplier responds with `OrderCommit` to confirm
+3. Order status changes to `committed`
+
+**Topic**: `mesh/orders/{order_id}/accept` (QoS 1)
+**Topic**: `mesh/orders/{order_id}/commit` (QoS 2)
+
+## Phase 5: EXECUTE
+
+1. Supplier prepares the order (status: `fulfilling`)
+2. Buyer publishes `ShippingRequest` for logistics bids
+3. Logistics provider submits `ShippingBid`, gets assigned
+4. `TransitUpdate` messages track: `picked_up` -> `in_transit` -> `delivered`
+
+## Phase 6: VERIFY
+
+1. Buyer publishes `InspectionRequest` to inspectors
+2. Inspector publishes `InspectionReport` with quality score
+3. If `passed: true`, proceed to settlement
+4. If `passed: false`, dispute resolution may be triggered
+
+**Topic**: `mesh/quality/{inspection_id}/report` (QoS 2)
+
+## Phase 7: SETTLE
+
+After successful inspection:
+
+1. Escrow released to supplier (minus fees)
+2. Platform fee (2%) deducted
+3. Burn (1%) permanently removed
+4. Logistics and inspector paid
+5. Reputation scores updated for all participants
+6. Order status: `settled`
+
+## Error Handling
+
+| Error | Recovery |
+|-------|----------|
+| No bids received | Order cancelled after bid deadline |
+| Supplier disappears after commit | Self-healing redistributes to backup supplier |
+| Inspection fails | Dispute raised, arbiter decides escrow |
+| Logistics loses shipment | Penalty applied, new shipping request issued |

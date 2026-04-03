@@ -1,0 +1,1157 @@
+asyncapi: 3.0.0
+info:
+  title: AgentMesh MQTT Protocol
+  version: 1.0.0
+  description: |
+    The MESH protocol defines how autonomous agents communicate over MQTT
+    to coordinate supply chain operations. All messages are wrapped in a
+    MessageEnvelope with HMAC-SHA256 signatures and Hybrid Logical Clock ordering.
+
+    Protocol phases: DISCOVER -> REQUEST -> BID -> NEGOTIATE -> COMMIT -> EXECUTE -> VERIFY -> SETTLE
+  contact:
+    name: Tomeku Development
+    url: https://agentmesh.world
+  license:
+    name: MIT
+    url: https://github.com/Tomeku-Development/AgentMesh/blob/main/LICENSE
+
+servers:
+  production:
+    host: mqtt.agentmesh.world:8883
+    protocol: mqtts
+    description: Production MQTT broker (FoxMQ BFT cluster)
+  local:
+    host: localhost:1883
+    protocol: mqtt
+    description: Local development broker
+
+defaultContentType: application/json
+
+channels:
+  # ── Discovery ──────────────────────────────────────────
+  discoveryAnnounce:
+    address: mesh/discovery/announce
+    title: Agent Announcement
+    description: Agent presence announcement. Retained so new subscribers see current agents.
+    messages:
+      announce:
+        $ref: '#/components/messages/DiscoveryAnnounce'
+    bindings:
+      mqtt:
+        qos: 1
+        retain: true
+
+  discoveryHeartbeat:
+    address: mesh/discovery/heartbeat
+    title: Agent Heartbeat
+    description: Periodic liveness signal. Agents that miss 3 consecutive heartbeats are considered failed.
+    messages:
+      heartbeat:
+        $ref: '#/components/messages/Heartbeat'
+    bindings:
+      mqtt:
+        qos: 0
+        retain: false
+
+  discoveryGoodbye:
+    address: mesh/discovery/goodbye
+    title: Agent Goodbye
+    description: Graceful shutdown notification.
+    messages:
+      goodbye:
+        $ref: '#/components/messages/Goodbye'
+    bindings:
+      mqtt:
+        qos: 1
+        retain: false
+
+  # ── Orders ─────────────────────────────────────────────
+  orderRequest:
+    address: mesh/orders/{orderId}/request
+    title: Purchase Order Request
+    description: Buyer publishes a purchase order requesting bids from suppliers.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      request:
+        $ref: '#/components/messages/PurchaseOrderRequest'
+    bindings:
+      mqtt:
+        qos: 1
+
+  orderBid:
+    address: mesh/orders/{orderId}/bid
+    title: Supplier Bid
+    description: Supplier submits a bid for a purchase order.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      bid:
+        $ref: '#/components/messages/SupplierBid'
+    bindings:
+      mqtt:
+        qos: 1
+
+  orderCounter:
+    address: mesh/orders/{orderId}/counter
+    title: Counter Offer
+    description: Counter-offer during multi-round negotiation (max 3 rounds).
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      counter:
+        $ref: '#/components/messages/CounterOffer'
+    bindings:
+      mqtt:
+        qos: 1
+
+  orderAccept:
+    address: mesh/orders/{orderId}/accept
+    title: Bid Acceptance
+    description: Buyer accepts a supplier's bid. Triggers escrow lock.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      accept:
+        $ref: '#/components/messages/BidAcceptance'
+    bindings:
+      mqtt:
+        qos: 1
+
+  orderReject:
+    address: mesh/orders/{orderId}/reject
+    title: Bid Rejection
+    description: Buyer rejects a supplier's bid.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      reject:
+        $ref: '#/components/messages/BidRejection'
+    bindings:
+      mqtt:
+        qos: 1
+
+  orderCommit:
+    address: mesh/orders/{orderId}/commit
+    title: Order Commit
+    description: Supplier confirms commitment to fulfill the order. Uses QoS 2 for exactly-once delivery.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      commit:
+        $ref: '#/components/messages/OrderCommit'
+    bindings:
+      mqtt:
+        qos: 2
+
+  orderStatus:
+    address: mesh/orders/{orderId}/status
+    title: Order Status
+    description: Order lifecycle status update.
+    parameters:
+      orderId:
+        description: UUID of the order
+    messages:
+      status:
+        $ref: '#/components/messages/OrderStatus'
+    bindings:
+      mqtt:
+        qos: 1
+
+  # ── Shipping ───────────────────────────────────────────
+  shippingRequest:
+    address: mesh/shipping/{shipmentId}/request
+    title: Shipping Request
+    description: Request for shipping quotes from logistics providers.
+    parameters:
+      shipmentId:
+        description: UUID of the shipment
+    messages:
+      request:
+        $ref: '#/components/messages/ShippingRequest'
+    bindings:
+      mqtt:
+        qos: 1
+
+  shippingBid:
+    address: mesh/shipping/{shipmentId}/bid
+    title: Shipping Bid
+    description: Logistics provider's shipping quote.
+    parameters:
+      shipmentId:
+        description: UUID of the shipment
+    messages:
+      bid:
+        $ref: '#/components/messages/ShippingBid'
+    bindings:
+      mqtt:
+        qos: 1
+
+  shippingAssign:
+    address: mesh/shipping/{shipmentId}/assign
+    title: Shipping Assignment
+    description: Shipping task assigned to a logistics agent.
+    parameters:
+      shipmentId:
+        description: UUID of the shipment
+    messages:
+      assign:
+        $ref: '#/components/messages/ShippingAssign'
+    bindings:
+      mqtt:
+        qos: 1
+
+  shippingTransit:
+    address: mesh/shipping/{shipmentId}/transit
+    title: Transit Update
+    description: In-transit status update. Uses QoS 0 for high-frequency updates.
+    parameters:
+      shipmentId:
+        description: UUID of the shipment
+    messages:
+      transit:
+        $ref: '#/components/messages/TransitUpdate'
+    bindings:
+      mqtt:
+        qos: 0
+
+  # ── Quality ────────────────────────────────────────────
+  inspectionRequest:
+    address: mesh/quality/{inspectionId}/request
+    title: Inspection Request
+    description: Request quality inspection of delivered goods.
+    parameters:
+      inspectionId:
+        description: UUID of the inspection
+    messages:
+      request:
+        $ref: '#/components/messages/InspectionRequest'
+    bindings:
+      mqtt:
+        qos: 1
+
+  inspectionReport:
+    address: mesh/quality/{inspectionId}/report
+    title: Inspection Report
+    description: Quality inspection results. Uses QoS 2 for exactly-once delivery.
+    parameters:
+      inspectionId:
+        description: UUID of the inspection
+    messages:
+      report:
+        $ref: '#/components/messages/InspectionReport'
+    bindings:
+      mqtt:
+        qos: 2
+
+  # ── Market ─────────────────────────────────────────────
+  marketPrices:
+    address: mesh/market/prices
+    title: Market Prices
+    description: Oracle publishes current market prices for goods categories.
+    messages:
+      prices:
+        $ref: '#/components/messages/MarketPriceUpdate'
+    bindings:
+      mqtt:
+        qos: 1
+
+  marketDemand:
+    address: mesh/market/demand
+    title: Market Demand
+    description: Oracle publishes demand forecasts.
+    messages:
+      demand:
+        $ref: '#/components/messages/MarketDemand'
+    bindings:
+      mqtt:
+        qos: 1
+
+  # ── Reputation ─────────────────────────────────────────
+  reputationUpdates:
+    address: mesh/reputation/updates
+    title: Reputation Update
+    description: Per-capability reputation score change. Uses QoS 2 for exactly-once delivery.
+    messages:
+      update:
+        $ref: '#/components/messages/ReputationUpdate'
+    bindings:
+      mqtt:
+        qos: 2
+
+  # ── Ledger ─────────────────────────────────────────────
+  ledgerTransactions:
+    address: mesh/ledger/transactions
+    title: Ledger Transaction
+    description: Economic transaction record. Uses QoS 2 for exactly-once delivery.
+    messages:
+      transaction:
+        $ref: '#/components/messages/LedgerTransaction'
+    bindings:
+      mqtt:
+        qos: 2
+
+  # ── Health ─────────────────────────────────────────────
+  healthAlerts:
+    address: mesh/health/alerts
+    title: Health Alert
+    description: Failure detection alert from the self-healing subsystem.
+    messages:
+      alert:
+        $ref: '#/components/messages/HealthAlert'
+    bindings:
+      mqtt:
+        qos: 1
+
+  healthRedistribution:
+    address: mesh/health/redistribution
+    title: Role Redistribution
+    description: Role reassignment after agent failure. Uses QoS 2.
+    messages:
+      redistribution:
+        $ref: '#/components/messages/RoleRedistribution'
+    bindings:
+      mqtt:
+        qos: 2
+
+operations:
+  publishAnnounce:
+    action: send
+    channel:
+      $ref: '#/channels/discoveryAnnounce'
+    summary: Announce agent presence
+  receiveAnnounce:
+    action: receive
+    channel:
+      $ref: '#/channels/discoveryAnnounce'
+    summary: Discover agents on the network
+
+  publishHeartbeat:
+    action: send
+    channel:
+      $ref: '#/channels/discoveryHeartbeat'
+    summary: Send heartbeat
+  receiveHeartbeat:
+    action: receive
+    channel:
+      $ref: '#/channels/discoveryHeartbeat'
+    summary: Monitor agent liveness
+
+  publishGoodbye:
+    action: send
+    channel:
+      $ref: '#/channels/discoveryGoodbye'
+    summary: Announce graceful shutdown
+
+  publishOrderRequest:
+    action: send
+    channel:
+      $ref: '#/channels/orderRequest'
+    summary: Publish a purchase order (Buyer)
+  receiveOrderRequest:
+    action: receive
+    channel:
+      $ref: '#/channels/orderRequest'
+    summary: Receive purchase orders (Supplier)
+
+  publishBid:
+    action: send
+    channel:
+      $ref: '#/channels/orderBid'
+    summary: Submit a bid (Supplier)
+  receiveBid:
+    action: receive
+    channel:
+      $ref: '#/channels/orderBid'
+    summary: Receive bids (Buyer)
+
+  publishCounter:
+    action: send
+    channel:
+      $ref: '#/channels/orderCounter'
+    summary: Send counter-offer
+  receiveCounter:
+    action: receive
+    channel:
+      $ref: '#/channels/orderCounter'
+    summary: Receive counter-offer
+
+  publishAccept:
+    action: send
+    channel:
+      $ref: '#/channels/orderAccept'
+    summary: Accept a bid (Buyer)
+
+  publishReject:
+    action: send
+    channel:
+      $ref: '#/channels/orderReject'
+    summary: Reject a bid (Buyer)
+
+  publishCommit:
+    action: send
+    channel:
+      $ref: '#/channels/orderCommit'
+    summary: Confirm order commitment (Supplier)
+
+  publishStatus:
+    action: send
+    channel:
+      $ref: '#/channels/orderStatus'
+    summary: Publish order status update
+
+  publishShippingRequest:
+    action: send
+    channel:
+      $ref: '#/channels/shippingRequest'
+    summary: Request shipping quotes
+
+  publishShippingBid:
+    action: send
+    channel:
+      $ref: '#/channels/shippingBid'
+    summary: Submit shipping bid (Logistics)
+
+  publishTransit:
+    action: send
+    channel:
+      $ref: '#/channels/shippingTransit'
+    summary: Publish transit status (Logistics)
+
+  publishInspectionReport:
+    action: send
+    channel:
+      $ref: '#/channels/inspectionReport'
+    summary: Submit inspection report (Inspector)
+
+  publishPrices:
+    action: send
+    channel:
+      $ref: '#/channels/marketPrices'
+    summary: Publish market prices (Oracle)
+
+  publishDemand:
+    action: send
+    channel:
+      $ref: '#/channels/marketDemand'
+    summary: Publish demand forecasts (Oracle)
+
+components:
+  messages:
+    DiscoveryAnnounce:
+      name: DiscoveryAnnounce
+      title: Agent Announcement
+      summary: Agent presence announcement (retained)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DiscoveryAnnouncePayload'
+
+    Heartbeat:
+      name: Heartbeat
+      title: Heartbeat
+      summary: Periodic liveness signal
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/HeartbeatPayload'
+
+    Goodbye:
+      name: Goodbye
+      title: Goodbye
+      summary: Graceful shutdown notification
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/GoodbyePayload'
+
+    PurchaseOrderRequest:
+      name: PurchaseOrderRequest
+      title: Purchase Order
+      summary: Buyer's purchase order request
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/PurchaseOrderRequestPayload'
+
+    SupplierBid:
+      name: SupplierBid
+      title: Supplier Bid
+      summary: Supplier's bid on a purchase order
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SupplierBidPayload'
+
+    CounterOffer:
+      name: CounterOffer
+      title: Counter Offer
+      summary: Counter-offer during negotiation
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CounterOfferPayload'
+
+    BidAcceptance:
+      name: BidAcceptance
+      title: Bid Acceptance
+      summary: Buyer accepts a bid
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/BidAcceptancePayload'
+
+    BidRejection:
+      name: BidRejection
+      title: Bid Rejection
+      summary: Buyer rejects a bid
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/BidRejectionPayload'
+
+    OrderCommit:
+      name: OrderCommit
+      title: Order Commit
+      summary: Supplier confirms commitment
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/OrderCommitPayload'
+
+    OrderStatus:
+      name: OrderStatus
+      title: Order Status
+      summary: Order lifecycle status update
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/OrderStatusPayload'
+
+    ShippingRequest:
+      name: ShippingRequest
+      title: Shipping Request
+      summary: Request for shipping quotes
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ShippingRequestPayload'
+
+    ShippingBid:
+      name: ShippingBid
+      title: Shipping Bid
+      summary: Logistics provider's shipping quote
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ShippingBidPayload'
+
+    ShippingAssign:
+      name: ShippingAssign
+      title: Shipping Assignment
+      summary: Shipping task assigned to logistics agent
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ShippingAssignPayload'
+
+    TransitUpdate:
+      name: TransitUpdate
+      title: Transit Update
+      summary: In-transit status update
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TransitUpdatePayload'
+
+    InspectionRequest:
+      name: InspectionRequest
+      title: Inspection Request
+      summary: Request quality inspection
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/InspectionRequestPayload'
+
+    InspectionReport:
+      name: InspectionReport
+      title: Inspection Report
+      summary: Quality inspection results
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/InspectionReportPayload'
+
+    MarketPriceUpdate:
+      name: MarketPriceUpdate
+      title: Market Price Update
+      summary: Oracle publishes market prices
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MarketPriceUpdatePayload'
+
+    MarketDemand:
+      name: MarketDemand
+      title: Market Demand
+      summary: Oracle publishes demand forecasts
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MarketDemandPayload'
+
+    ReputationUpdate:
+      name: ReputationUpdate
+      title: Reputation Update
+      summary: Per-capability reputation score change
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ReputationUpdatePayload'
+
+    LedgerTransaction:
+      name: LedgerTransaction
+      title: Ledger Transaction
+      summary: Economic transaction record
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/LedgerTransactionPayload'
+
+    HealthAlert:
+      name: HealthAlert
+      title: Health Alert
+      summary: Failure detection alert
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/HealthAlertPayload'
+
+    RoleRedistribution:
+      name: RoleRedistribution
+      title: Role Redistribution
+      summary: Role reassignment after agent failure
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/RoleRedistributionPayload'
+
+  schemas:
+    # ── Envelope ───────────────────────────────────────
+    MessageHeader:
+      type: object
+      description: Common header for all MESH messages (inside MessageEnvelope)
+      required: [message_id, timestamp, sender_id, sender_role]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp
+        sender_id:
+          type: string
+          description: 16-character hex agent ID
+        sender_role:
+          type: string
+          enum: [buyer, supplier, logistics, inspector, oracle]
+        protocol_version:
+          type: string
+          default: "mesh/1.0"
+        hlc:
+          type: string
+          description: "Hybrid Logical Clock value (format: physical_ms:logical:node_id)"
+
+    MessageEnvelope:
+      type: object
+      description: Top-level message wrapper. All MQTT messages are wrapped in this envelope.
+      required: [header, payload]
+      properties:
+        header:
+          $ref: '#/components/schemas/MessageHeader'
+        payload:
+          type: object
+          additionalProperties: true
+        signature:
+          type: string
+          description: HMAC-SHA256 hex signature of the canonical JSON payload
+
+    # ── Discovery ──────────────────────────────────────
+    DiscoveryAnnouncePayload:
+      type: object
+      required: [agent_id, role]
+      properties:
+        agent_id:
+          type: string
+        role:
+          type: string
+          enum: [buyer, supplier, logistics, inspector, oracle]
+        capabilities:
+          type: array
+          items:
+            type: string
+          default: []
+        goods_categories:
+          type: array
+          items:
+            type: string
+          default: []
+        public_key_hex:
+          type: string
+          description: Ed25519 public key (hex)
+        status:
+          type: string
+          enum: [online, busy, degraded, rejoining]
+          default: online
+        max_concurrent_orders:
+          type: integer
+          default: 5
+
+    HeartbeatPayload:
+      type: object
+      required: [agent_id, role]
+      properties:
+        agent_id:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+          enum: [healthy, busy, degraded]
+          default: healthy
+        load:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Current load factor (0.0 = idle, 1.0 = fully loaded)
+        active_orders:
+          type: integer
+          default: 0
+        uptime_seconds:
+          type: number
+          default: 0
+
+    GoodbyePayload:
+      type: object
+      required: [agent_id]
+      properties:
+        agent_id:
+          type: string
+        reason:
+          type: string
+          default: shutdown
+
+    # ── Orders ─────────────────────────────────────────
+    PurchaseOrderRequestPayload:
+      type: object
+      required: [order_id, goods, category, quantity, max_price_per_unit]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        goods:
+          type: string
+          description: Type of goods (e.g., "microcontrollers")
+        category:
+          type: string
+          description: Goods category (e.g., "semiconductors")
+        quantity:
+          type: integer
+          minimum: 1
+        max_price_per_unit:
+          type: number
+        quality_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.85
+        delivery_deadline_seconds:
+          type: integer
+          default: 60
+        required_capabilities:
+          type: array
+          items:
+            type: string
+          default: []
+        bid_deadline_seconds:
+          type: integer
+          default: 10
+
+    SupplierBidPayload:
+      type: object
+      required: [order_id, bid_id, supplier_id, price_per_unit, available_quantity]
+      properties:
+        order_id:
+          type: string
+        bid_id:
+          type: string
+          format: uuid
+        supplier_id:
+          type: string
+        price_per_unit:
+          type: number
+        available_quantity:
+          type: integer
+        estimated_fulfillment_seconds:
+          type: integer
+          default: 10
+        reputation_score:
+          type: number
+          default: 0.5
+        notes:
+          type: string
+
+    CounterOfferPayload:
+      type: object
+      required: [order_id, counter_id, original_bid_id, from_agent, to_agent, proposed_price_per_unit]
+      properties:
+        order_id:
+          type: string
+        counter_id:
+          type: string
+          format: uuid
+        original_bid_id:
+          type: string
+        from_agent:
+          type: string
+        to_agent:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+          maximum: 3
+          default: 1
+        proposed_price_per_unit:
+          type: number
+        proposed_quantity:
+          type: integer
+          nullable: true
+        proposed_deadline_seconds:
+          type: integer
+          nullable: true
+        justification:
+          type: string
+        expires_seconds:
+          type: integer
+          default: 10
+
+    BidAcceptancePayload:
+      type: object
+      required: [order_id, accepted_bid_id, supplier_id, agreed_price_per_unit, agreed_quantity, escrow_amount]
+      properties:
+        order_id:
+          type: string
+        accepted_bid_id:
+          type: string
+        supplier_id:
+          type: string
+        agreed_price_per_unit:
+          type: number
+        agreed_quantity:
+          type: integer
+        escrow_amount:
+          type: number
+        escrow_tx_id:
+          type: string
+          format: uuid
+
+    BidRejectionPayload:
+      type: object
+      required: [order_id, rejected_bid_id, supplier_id]
+      properties:
+        order_id:
+          type: string
+        rejected_bid_id:
+          type: string
+        supplier_id:
+          type: string
+        reason:
+          type: string
+
+    OrderCommitPayload:
+      type: object
+      required: [order_id, supplier_id]
+      properties:
+        order_id:
+          type: string
+        supplier_id:
+          type: string
+        committed_at:
+          type: string
+          format: date-time
+        estimated_ready_seconds:
+          type: integer
+          default: 10
+
+    OrderStatusPayload:
+      type: object
+      required: [order_id, status, updated_by]
+      properties:
+        order_id:
+          type: string
+        status:
+          type: string
+          enum: [open, bidding, negotiating, committed, fulfilling, shipping, delivered, inspecting, settled, cancelled, failed, recovering]
+        updated_by:
+          type: string
+        details:
+          type: string
+
+    # ── Shipping ───────────────────────────────────────
+    ShippingRequestPayload:
+      type: object
+      required: [shipment_id, order_id]
+      properties:
+        shipment_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+        origin:
+          type: string
+          default: supplier_warehouse
+        destination:
+          type: string
+          default: buyer_warehouse
+        weight_kg:
+          type: number
+          default: 10
+        fragile:
+          type: boolean
+          default: false
+        deadline_seconds:
+          type: integer
+          default: 30
+        bid_deadline_seconds:
+          type: integer
+          default: 10
+
+    ShippingBidPayload:
+      type: object
+      required: [shipment_id, bid_id, logistics_id, price]
+      properties:
+        shipment_id:
+          type: string
+        bid_id:
+          type: string
+          format: uuid
+        logistics_id:
+          type: string
+        price:
+          type: number
+        estimated_transit_seconds:
+          type: integer
+          default: 15
+        vehicle_type:
+          type: string
+          enum: [truck, drone, rail]
+          default: truck
+
+    ShippingAssignPayload:
+      type: object
+      required: [shipment_id, order_id, logistics_id, accepted_bid_id, price]
+      properties:
+        shipment_id:
+          type: string
+        order_id:
+          type: string
+        logistics_id:
+          type: string
+        accepted_bid_id:
+          type: string
+        price:
+          type: number
+
+    TransitUpdatePayload:
+      type: object
+      required: [shipment_id, logistics_id, status]
+      properties:
+        shipment_id:
+          type: string
+        logistics_id:
+          type: string
+        status:
+          type: string
+          enum: [picked_up, in_transit, out_for_delivery, delivered]
+        eta_seconds:
+          type: integer
+          default: 0
+        condition:
+          type: string
+          enum: [good, damaged, unknown]
+          default: good
+
+    # ── Quality ────────────────────────────────────────
+    InspectionRequestPayload:
+      type: object
+      required: [inspection_id, order_id, shipment_id, goods, quantity_expected, quality_threshold]
+      properties:
+        inspection_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+        shipment_id:
+          type: string
+        goods:
+          type: string
+        quantity_expected:
+          type: integer
+        quality_threshold:
+          type: number
+
+    InspectionReportPayload:
+      type: object
+      required: [inspection_id, order_id, shipment_id, inspector_id, quality_score, quantity_verified, passed]
+      properties:
+        inspection_id:
+          type: string
+        order_id:
+          type: string
+        shipment_id:
+          type: string
+        inspector_id:
+          type: string
+        quality_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        quantity_verified:
+          type: integer
+        quantity_defective:
+          type: integer
+          default: 0
+        defect_descriptions:
+          type: array
+          items:
+            type: string
+          default: []
+        passed:
+          type: boolean
+        recommendation:
+          type: string
+          enum: [accept, partial_accept, reject]
+          default: accept
+
+    # ── Market ─────────────────────────────────────────
+    MarketPriceUpdatePayload:
+      type: object
+      required: [oracle_id, prices]
+      properties:
+        oracle_id:
+          type: string
+        prices:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              price:
+                type: number
+              trend:
+                type: number
+              volatility:
+                type: number
+          description: "Map of goods category to {price, trend, volatility}"
+        epoch:
+          type: integer
+          default: 0
+
+    MarketDemandPayload:
+      type: object
+      required: [oracle_id, forecasts]
+      properties:
+        oracle_id:
+          type: string
+        forecasts:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              demand:
+                type: number
+              growth_rate:
+                type: number
+          description: "Map of goods category to {demand, growth_rate}"
+        epoch:
+          type: integer
+          default: 0
+
+    # ── Reputation ─────────────────────────────────────
+    ReputationUpdatePayload:
+      type: object
+      required: [subject_id, capability, old_score, new_score, reason]
+      properties:
+        subject_id:
+          type: string
+        capability:
+          type: string
+        old_score:
+          type: number
+        new_score:
+          type: number
+        reason:
+          type: string
+          enum: [order_fulfilled, quality_pass, on_time, late_delivery, quality_fail, no_show, byzantine, decay]
+        evidence_order_id:
+          type: string
+
+    # ── Ledger ─────────────────────────────────────────
+    LedgerTransactionPayload:
+      type: object
+      required: [tx_id, tx_type, from_agent, to_agent, amount]
+      properties:
+        tx_id:
+          type: string
+          format: uuid
+        tx_type:
+          type: string
+          enum: [escrow_lock, escrow_release, payment, fee, penalty, reward, burn]
+        from_agent:
+          type: string
+        to_agent:
+          type: string
+        amount:
+          type: number
+        order_id:
+          type: string
+        memo:
+          type: string
+        balance_after_from:
+          type: number
+        balance_after_to:
+          type: number
+
+    # ── Health ─────────────────────────────────────────
+    HealthAlertPayload:
+      type: object
+      required: [detector_id, suspect_agent_id, alert_type]
+      properties:
+        detector_id:
+          type: string
+        suspect_agent_id:
+          type: string
+        alert_type:
+          type: string
+          enum: [heartbeat_timeout, anomaly, byzantine, overload]
+        severity:
+          type: string
+          enum: [warning, critical, fatal]
+          default: warning
+        missed_heartbeats:
+          type: integer
+          default: 0
+        last_seen_seconds_ago:
+          type: number
+        recommended_action:
+          type: string
+          enum: [monitor, redistribute, quarantine]
+          default: monitor
+
+    RoleRedistributionPayload:
+      type: object
+      required: [redistribution_id, failed_agent_id, failed_role, replacement_agent_id]
+      properties:
+        redistribution_id:
+          type: string
+          format: uuid
+        failed_agent_id:
+          type: string
+        failed_role:
+          type: string
+        replacement_agent_id:
+          type: string
+        assumed_capabilities:
+          type: array
+          items:
+            type: string
+          default: []
+        active_orders_transferred:
+          type: array
+          items:
+            type: string
+          default: []

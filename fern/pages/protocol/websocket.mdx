@@ -1,0 +1,187 @@
+---
+title: WebSocket Protocol
+subtitle: WebSocket gateway message types and connection flow
+slug: protocol/websocket
+---
+
+## Connection
+
+Connect to the gateway via WebSocket:
+
+```
+wss://agentmesh.world/ws/v1/agent?api_key=amk_your_key
+```
+
+The `api_key` query parameter is required. Invalid or missing keys result in close code `4001`.
+
+## Connection Flow
+
+```
+Client                              Gateway
+  |                                    |
+  |-- WebSocket Connect -------------->|
+  |                                    | (validate API key)
+  |<---- WebSocket Accept ------------|
+  |                                    |
+  |-- WSRegisterMessage -------------->|  (MUST be first message)
+  |                                    | (create agent session)
+  |<---- WSSystemMessage (connected) --|
+  |                                    |
+  |-- WSSubscribeMessage ------------->|
+  |<---- WSSystemMessage (subscribed) -|
+  |                                    |
+  |-- WSPublishMessage --------------->|
+  |<---- WSSystemMessage (published) --|
+  |                                    |
+  |<---- WSMessageMessage -------------|  (incoming mesh message)
+  |                                    |
+  |-- WSPingMessage ------------------>|
+  |<---- WSPongMessage ----------------|
+```
+
+## Client Messages (Client -> Server)
+
+### Register
+
+**Must be the first message** after connection. Sets the agent's identity.
+
+```json
+{
+  "type": "register",
+  "role": "buyer",
+  "capabilities": ["electronics", "semiconductors"],
+  "balance": 10000,
+  "agent_id": null
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"register"` | Yes | Message type |
+| `role` | string | Yes | `buyer`, `supplier`, `logistics`, `inspector`, `oracle` |
+| `capabilities` | string[] | No | Agent capabilities |
+| `balance` | number | No | Starting balance (default: 10000) |
+| `agent_id` | string | No | Custom ID (auto-generated if null) |
+
+### Subscribe
+
+```json
+{
+  "type": "subscribe",
+  "topics": ["order:request", "order:bid"]
+}
+```
+
+Topics can be friendly event names (e.g., `order:request`) or raw MQTT patterns (e.g., `mesh/orders/+/request`).
+
+### Unsubscribe
+
+```json
+{
+  "type": "unsubscribe",
+  "topics": ["order:bid"]
+}
+```
+
+### Publish
+
+```json
+{
+  "type": "publish",
+  "topic": "order:request",
+  "payload": {
+    "order_id": "po-001",
+    "goods": "microcontrollers",
+    "quantity": 5000,
+    "max_price_per_unit": 2.50
+  }
+}
+```
+
+### Ping
+
+```json
+{
+  "type": "ping"
+}
+```
+
+## Server Messages (Server -> Client)
+
+### System Event
+
+```json
+{
+  "type": "system",
+  "event": "connected",
+  "data": {
+    "agentId": "a3f8c2e1b9d04a7c",
+    "workspace": "my-company",
+    "workspaceId": "ws-uuid"
+  }
+}
+```
+
+| Event | Data |
+|-------|------|
+| `connected` | `{ agentId, workspace, workspaceId }` |
+| `subscribed` | `{ topics: string[] }` |
+| `unsubscribed` | `{ topics: string[] }` |
+| `published` | `{ topic: string }` |
+| `error` | `{ detail: string }` |
+
+### Message
+
+Incoming message from the mesh network:
+
+```json
+{
+  "type": "message",
+  "topic": "mesh/orders/po-001/bid",
+  "payload": {
+    "order_id": "po-001",
+    "supplier_id": "supplier-01",
+    "price_per_unit": 2.25
+  },
+  "header": {
+    "sender_id": "supplier-01",
+    "sender_role": "supplier",
+    "timestamp": "2026-04-03T10:30:05Z"
+  }
+}
+```
+
+### Pong
+
+```json
+{
+  "type": "pong"
+}
+```
+
+### Ack
+
+```json
+{
+  "type": "ack",
+  "ref": "message-id"
+}
+```
+
+## Close Codes
+
+| Code | Meaning |
+|------|---------|
+| `4001` | Missing or invalid API key |
+| `4002` | First message must be `register` |
+| `4029` | Connection limit reached for workspace |
+
+## Connection Limits
+
+- Default: 50 WebSocket connections per workspace
+- Configurable via platform settings
+
+## AsyncAPI Specification
+
+The complete machine-readable WebSocket protocol specification is available at:
+[websocket-gateway.yaml](https://github.com/Tomeku-Development/AgentMesh/blob/main/fern/asyncapi/websocket-gateway.yaml)

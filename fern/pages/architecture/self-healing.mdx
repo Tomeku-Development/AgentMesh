@@ -1,0 +1,124 @@
+---
+title: Self-Healing
+subtitle: Failure detection, role redistribution, and graceful recovery
+slug: architecture/self-healing
+---
+
+## Overview
+
+The AgentMesh self-healing system operates without any central coordinator. It uses three components:
+
+1. **Detector**: Monitors heartbeats and detects agent failures
+2. **Redistributor**: Reassigns roles from failed agents to healthy ones
+3. **Recovery**: Manages gradual capacity ramp-up for replacement agents
+
+## Failure Detection
+
+Every agent publishes `Heartbeat` messages every 5 seconds (configurable):
+
+```json
+{
+  "agent_id": "supplier-01",
+  "role": "supplier",
+  "status": "healthy",
+  "load": 0.35,
+  "active_orders": 2,
+  "uptime_seconds": 3600
+}
+```
+
+### Detection Rules
+
+| Condition | Action |
+|-----------|--------|
+| 1 missed heartbeat (5s) | Status: `warning` -- continue monitoring |
+| 2 missed heartbeats (10s) | Status: `critical` -- prepare for redistribution |
+| 3 missed heartbeats (15s) | Status: `fatal` -- trigger redistribution |
+
+### Alert Publication
+
+When a failure is detected, a `HealthAlert` is published:
+
+```json
+{
+  "detector_id": "buyer-01",
+  "suspect_agent_id": "supplier-01",
+  "alert_type": "heartbeat_timeout",
+  "severity": "fatal",
+  "missed_heartbeats": 3,
+  "last_seen_seconds_ago": 15.2,
+  "recommended_action": "redistribute"
+}
+```
+
+## Role Redistribution
+
+When an agent fails, the redistributor selects a replacement:
+
+### Selection Criteria
+
+1. **Same role**: The replacement must have the same role or compatible capabilities
+2. **Lowest load**: Prefer agents with the lowest current `load` factor
+3. **Highest reputation**: Among equally loaded agents, prefer higher reputation
+4. **Not recovering**: Agents already in recovery mode are deprioritized
+
+### Redistribution Message
+
+```json
+{
+  "redistribution_id": "uuid",
+  "failed_agent_id": "supplier-01",
+  "failed_role": "supplier",
+  "replacement_agent_id": "supplier-02",
+  "assumed_capabilities": ["electronics", "displays"],
+  "active_orders_transferred": ["po-laptop-001", "po-phone-003"]
+}
+```
+
+### What Gets Transferred
+
+- **Active orders**: All in-progress orders from the failed agent
+- **Capabilities**: The failed agent's capability set
+- **State**: Current order states (bidding, committed, fulfilling)
+
+## Recovery Protocol
+
+The replacement agent doesn't immediately operate at full capacity:
+
+### Ramp-Up Schedule
+
+| Phase | Capacity | Duration |
+|-------|----------|----------|
+| Initial | 50% | First 30 seconds |
+| Warming | 75% | 30-60 seconds |
+| Full | 100% | After 60 seconds |
+
+### Recovery Behavior
+
+- During ramp-up, the agent handles transferred orders but limits new bids
+- If the replacement also fails during ramp-up, the system escalates to the next candidate
+- The original agent can rejoin with status `rejoining` after recovery
+
+## Rejoining
+
+If a failed agent comes back online:
+
+1. It announces with `status: "rejoining"` instead of `online`
+2. It does not immediately reclaim its transferred orders
+3. It starts at 50% capacity and ramps up
+4. Transferred orders stay with the replacement to avoid disruption
+5. New orders are gradually routed to the rejoining agent
+
+## Chaos Testing
+
+The project includes chaos tests that validate self-healing:
+
+```bash
+pytest tests/chaos/test_self_healing.py -v
+```
+
+Tests cover:
+- Single agent failure and redistribution
+- Cascading failures (2 agents fail simultaneously)
+- Rapid failure/recovery cycles
+- Recovery during active order fulfillment

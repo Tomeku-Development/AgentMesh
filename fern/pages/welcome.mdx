@@ -1,0 +1,63 @@
+---
+title: AgentMesh
+subtitle: Decentralized Multi-Agent Coordination Network
+slug: welcome
+---
+
+## What is AgentMesh?
+
+[AgentMesh](https://agentmesh.world) is a **decentralized multi-agent coordination network** for supply chain operations. It enables autonomous agents -- buyers, suppliers, logistics providers, inspectors, and oracles -- to discover each other, negotiate orders, coordinate shipping, inspect quality, and settle payments through a real-time mesh network.
+
+There is **no central orchestrator**. All coordination happens through BFT-ordered MQTT messages on a FoxMQ cluster. Because FoxMQ uses Hashgraph consensus, every agent sees messages in the same total order, making all local state computations (ledger balances, reputation scores, order states) converge deterministically.
+
+## How it Works
+
+```
+  Your Agent (SDK/CLI)
+       |
+       | WebSocket (wss://agentmesh.world/ws/v1/agent)
+       |
+  [ AgentMesh Gateway ]
+       |
+       | MQTT + BFT Consensus (FoxMQ)
+       |
+  [ Mesh Network ]
+       |
+  Buyers / Suppliers / Logistics / Inspectors / Oracles
+```
+
+## Key Features
+
+- **5 Agent Roles**: Buyer, Supplier, Logistics, Inspector, Oracle -- each with distinct behaviors
+- **22 Message Types**: Typed protocol covering the entire supply chain lifecycle
+- **Multi-round Negotiation**: Up to 3 rounds of counter-offers with pluggable strategies (Aggressive, Conservative, Adaptive)
+- **MESH_CREDIT Economy**: Built-in escrow, settlement, fees, penalties, and burn mechanics
+- **Per-capability Reputation**: Scores per skill, not global -- with decay toward neutral
+- **Self-Healing**: Automatic failure detection, role redistribution, and gradual recovery
+- **TypeScript SDK + CLI**: Connect agents from Node.js or directly from your terminal
+- **Real-time Dashboard**: SvelteKit visualization of the mesh network
+
+## Quick Links
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart">
+    Install the SDK and connect your first agent in 5 minutes.
+  </Card>
+  <Card title="Tutorials" href="/docs/tutorials/buyer-agent">
+    Step-by-step guides for building buyer, supplier, and IoT agents.
+  </Card>
+  <Card title="REST API Reference" href="/api/rest">
+    Full reference for the platform REST API (auth, workspaces, orders, payments).
+  </Card>
+  <Card title="Protocol Deep Dive" href="/docs/protocol/order-lifecycle">
+    Understand the 7-phase order lifecycle from request to settlement.
+  </Card>
+</Cards>
+
+## Who Built This
+
+AgentMesh is developed by **[Hitazurana (HiroJei)](https://tomeku.com)** at **[Tomeku Development](https://tomeku.com)**.
+
+- Website: [agentmesh.world](https://agentmesh.world)
+- GitHub: [Tomeku-Development/AgentMesh](https://github.com/Tomeku-Development/AgentMesh)
+- SDK: [@agentmeshworld/sdk](https://www.npmjs.com/package/@agentmeshworld/sdk)

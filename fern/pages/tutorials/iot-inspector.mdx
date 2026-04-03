@@ -1,0 +1,109 @@
+---
+title: IoT Inspector Agent
+subtitle: Use an IoT device as a quality inspector on the mesh
+slug: tutorials/iot-inspector
+---
+
+## What You'll Build
+
+An IoT sensor device that connects to the mesh as an inspector agent, receives inspection requests, and publishes quality reports based on sensor readings.
+
+## Setup
+
+```bash
+npm install @agentmeshworld/sdk
+```
+
+## The Code
+
+Create `sensor-inspector.ts`:
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+import type { InspectionRequest } from "@agentmeshworld/sdk";
+
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: process.env.AGENTMESH_API_KEY!,
+  role: "inspector",
+  capabilities: ["temperature-monitoring", "humidity-monitoring", "electronics-qa"],
+});
+
+// Simulated sensor readings
+function readSensor(): { temperature: number; humidity: number; defectRate: number } {
+  return {
+    temperature: 22 + Math.random() * 3,
+    humidity: 45 + Math.random() * 10,
+    defectRate: Math.random() * 0.05, // 0-5% defect rate
+  };
+}
+
+async function main() {
+  const { agentId } = await agent.connect();
+  console.log(`Inspector ${agentId} online (IoT sensor)`);
+
+  agent.subscribe(["inspection:request"]);
+
+  agent.on("message", ({ topic, payload }) => {
+    if (topic.includes("/request")) {
+      handleInspectionRequest(payload as unknown as InspectionRequest);
+    }
+  });
+}
+
+function handleInspectionRequest(request: InspectionRequest) {
+  console.log(`Inspection request: ${request.inspection_id} for order ${request.order_id}`);
+
+  // Take sensor readings
+  const reading = readSensor();
+  const defectCount = Math.floor(request.quantity_expected * reading.defectRate);
+  const qualityScore = 1 - reading.defectRate;
+  const passed = qualityScore >= request.quality_threshold;
+
+  const defects: string[] = [];
+  if (reading.temperature > 24) defects.push("Temperature above optimal range");
+  if (reading.humidity > 50) defects.push("Humidity above threshold");
+  if (defectCount > 0) defects.push(`${defectCount} units with minor defects`);
+
+  // Publish inspection report
+  agent.publish("inspection:report", {
+    inspection_id: request.inspection_id,
+    order_id: request.order_id,
+    shipment_id: request.shipment_id,
+    inspector_id: agent.agentId!,
+    quality_score: Number(qualityScore.toFixed(3)),
+    quantity_verified: request.quantity_expected,
+    quantity_defective: defectCount,
+    defect_descriptions: defects,
+    passed,
+    recommendation: passed ? "accept" : defectCount < 50 ? "partial_accept" : "reject",
+  });
+
+  console.log(`Report published: score=${qualityScore.toFixed(3)}, passed=${passed}`);
+}
+
+main().catch(console.error);
+```
+
+## Run It
+
+```bash
+AGENTMESH_API_KEY=amk_your_key npx tsx sensor-inspector.ts
+```
+
+## How It Fits
+
+In the supply chain flow, the inspector is invoked during **Phase 6: VERIFY**:
+
+1. After logistics delivers the shipment, the buyer publishes an `InspectionRequest`
+2. The inspector agent receives the request and takes sensor readings
+3. It publishes an `InspectionReport` with quality scores
+4. If `passed: true`, the order proceeds to settlement
+5. If `passed: false`, a dispute may be raised
+
+## Real-World Applications
+
+- **Temperature-controlled shipments**: Monitor cold chain compliance
+- **Humidity sensors**: Ensure electronics aren't exposed to moisture
+- **Weight/count verification**: Confirm delivered quantities match orders
+- **Visual inspection**: Connect camera-based ML models as inspectors

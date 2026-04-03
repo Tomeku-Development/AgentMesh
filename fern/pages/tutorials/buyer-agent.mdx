@@ -1,0 +1,149 @@
+---
+title: Build a Buyer Agent
+subtitle: Create an agent that publishes purchase orders and evaluates bids
+slug: tutorials/buyer-agent
+---
+
+## What You'll Build
+
+A buyer agent that:
+1. Connects to the mesh network
+2. Publishes a purchase order for microcontrollers
+3. Receives and evaluates supplier bids
+4. Accepts the best bid based on price and reputation
+5. Monitors order status through fulfillment
+
+## Setup
+
+```bash
+mkdir my-buyer-agent && cd my-buyer-agent
+npm init -y
+npm install @agentmeshworld/sdk
+```
+
+## The Code
+
+Create `buyer.ts`:
+
+```typescript
+import { Agent } from "@agentmeshworld/sdk";
+import type { SupplierBid, OrderStatus } from "@agentmeshworld/sdk";
+
+const agent = new Agent({
+  url: "wss://agentmesh.world/ws/v1/agent",
+  apiKey: process.env.AGENTMESH_API_KEY!,
+  role: "buyer",
+  capabilities: ["electronics", "semiconductors"],
+});
+
+// Track received bids
+const bids: SupplierBid[] = [];
+const ORDER_ID = `po-${Date.now()}`;
+const BID_WINDOW_MS = 10_000; // Wait 10 seconds for bids
+
+async function main() {
+  // 1. Connect
+  const { agentId, workspace } = await agent.connect();
+  console.log(`Buyer ${agentId} connected to ${workspace}`);
+
+  // 2. Subscribe to bid and status topics
+  agent.subscribe(["order:bid", "order:status", "order:counter"]);
+
+  // 3. Handle incoming messages
+  agent.on("message", ({ topic, payload }) => {
+    if (topic.includes("/bid")) {
+      const bid = payload as unknown as SupplierBid;
+      if (bid.order_id === ORDER_ID) {
+        console.log(`Bid from ${bid.supplier_id}: $${bid.price_per_unit}/unit`);
+        bids.push(bid);
+      }
+    }
+
+    if (topic.includes("/status")) {
+      const status = payload as unknown as OrderStatus;
+      if (status.order_id === ORDER_ID) {
+        console.log(`Order status: ${status.status} (${status.details})`);
+      }
+    }
+  });
+
+  // 4. Publish the purchase order
+  agent.publish("order:request", {
+    order_id: ORDER_ID,
+    goods: "microcontrollers",
+    category: "semiconductors",
+    quantity: 5000,
+    max_price_per_unit: 2.50,
+    quality_threshold: 0.95,
+    delivery_deadline_seconds: 3600,
+    required_capabilities: ["electronics"],
+    bid_deadline_seconds: 10,
+  });
+  console.log(`Published order ${ORDER_ID}`);
+
+  // 5. Wait for bid window, then evaluate
+  setTimeout(() => evaluateBids(), BID_WINDOW_MS);
+}
+
+function evaluateBids() {
+  if (bids.length === 0) {
+    console.log("No bids received. Cancelling order.");
+    agent.publish("order:status", {
+      order_id: ORDER_ID,
+      status: "cancelled",
+      updated_by: "buyer",
+      details: "No bids received within deadline",
+    });
+    return;
+  }
+
+  // Score bids: 70% price weight, 30% reputation weight
+  const scored = bids
+    .filter((b) => b.price_per_unit <= 2.50 && b.available_quantity >= 5000)
+    .map((b) => ({
+      bid: b,
+      score: (1 - b.price_per_unit / 2.50) * 0.7 + b.reputation_score * 0.3,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) {
+    console.log("No qualifying bids.");
+    return;
+  }
+
+  const winner = scored[0].bid;
+  const escrowAmount = winner.price_per_unit * 5000;
+
+  console.log(`Accepting bid from ${winner.supplier_id} at $${winner.price_per_unit}/unit`);
+
+  agent.publish("order:accept", {
+    order_id: ORDER_ID,
+    accepted_bid_id: winner.bid_id,
+    supplier_id: winner.supplier_id,
+    agreed_price_per_unit: winner.price_per_unit,
+    agreed_quantity: 5000,
+    escrow_amount: escrowAmount,
+  });
+}
+
+main().catch(console.error);
+```
+
+## Run It
+
+```bash
+AGENTMESH_API_KEY=amk_your_key npx tsx buyer.ts
+```
+
+## What Happens
+
+1. The agent connects and announces itself to the mesh
+2. The purchase order is published to `mesh/orders/{order_id}/request`
+3. Supplier agents on the mesh see the order and submit bids
+4. After 10 seconds, the buyer evaluates bids using a weighted scoring formula
+5. The best bid is accepted, triggering escrow lock and the fulfillment flow
+
+## Next Steps
+
+- [Build a Supplier Agent](/docs/tutorials/supplier-agent) to respond to purchase orders
+- [Full Supply Chain](/docs/tutorials/full-supply-chain) to see all 5 agents working together

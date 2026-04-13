@@ -18,6 +18,7 @@
 	let revoking: string | null = null;
 	let confirmRevoke: string | null = null;
 	let tourReset = false;
+	let demoRunning = false;
 
 	$: workspaceId = get(activeWorkspaceId) || 'default';
 
@@ -111,6 +112,32 @@
 		resetTourState();
 		tourReset = true;
 		setTimeout(() => tourReset = false, 3000);
+	}
+
+	async function toggleDemo() {
+		if (!browser) return;
+		const { startDemo, stopDemo, isDemoMode } = await import('$lib/demo/demoEngine');
+		const { get } = await import('svelte/store');
+
+		if (get(isDemoMode)) {
+			stopDemo();
+			demoRunning = false;
+		} else {
+			const agentStore = await import('$lib/stores/agents');
+			const orderStore = await import('$lib/stores/orders');
+			const wsStore = await import('$lib/stores/websocket');
+			const metricsStore = await import('$lib/stores/metrics');
+			startDemo({
+				agents: agentStore.agents,
+				orders: orderStore.orders,
+				events: wsStore.events,
+				connected: wsStore.connected,
+				messageCount: wsStore.messageCount,
+				latencySamples: metricsStore.latencySamples,
+				throughputSamples: metricsStore.throughputSamples,
+			});
+			demoRunning = true;
+		}
 	}
 </script>
 
@@ -356,6 +383,9 @@
 		<div class="section-actions">
 			<button class="btn btn-primary" on:click={startTour}>Start Dashboard Tour</button>
 			<button class="btn btn-secondary" on:click={resetTour}>Reset Tour (Show Again on Next Visit)</button>
+			<button class="btn btn-secondary" on:click={toggleDemo}>
+				{demoRunning ? 'Stop Demo Mode' : 'Start Demo Mode'}
+			</button>
 		</div>
 		{#if tourReset}
 			<p class="reset-confirmation">Tour reset! The guide will appear on your next visit.</p>

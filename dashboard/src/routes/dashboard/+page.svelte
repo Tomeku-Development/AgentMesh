@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { connect } from '$lib/stores/websocket';
 	import { agentList } from '$lib/stores/agents';
 	import { orderList } from '$lib/stores/orders';
@@ -10,11 +11,59 @@
 	import EventLog from '$lib/components/EventLog.svelte';
 	import ChaosControls from '$lib/components/ChaosControls.svelte';
 
-	onMount(() => {
+	let demoActive = false;
+
+	onMount(async () => {
+		if (!browser) return;
+
 		const wsUrl = (typeof window !== 'undefined' && (window as any).__WS_URL) || 'ws://localhost:8080';
 		connect(wsUrl);
+
+		// After a delay, if not connected, auto-start demo mode
+		setTimeout(async () => {
+			const { connected } = await import('$lib/stores/websocket');
+			const { get } = await import('svelte/store');
+			if (!get(connected)) {
+				const { startDemo } = await import('$lib/demo/demoEngine');
+				const { agents } = await import('$lib/stores/agents');
+				const { orders } = await import('$lib/stores/orders');
+				const { events: wsEvents, connected: wsConnected, messageCount } = await import('$lib/stores/websocket');
+				const { latencySamples, throughputSamples } = await import('$lib/stores/metrics');
+				startDemo({
+					agents,
+					orders,
+					events: wsEvents,
+					connected: wsConnected,
+					messageCount,
+					latencySamples,
+					throughputSamples
+				});
+				demoActive = true;
+			}
+		}, 3000);
 	});
+
+	onDestroy(() => {
+		if (browser && demoActive) {
+			import('$lib/demo/demoEngine').then(m => m.stopDemo());
+		}
+	});
+
+	function dismissDemo() {
+		if (browser) {
+			import('$lib/demo/demoEngine').then(m => m.stopDemo());
+			demoActive = false;
+		}
+	}
 </script>
+
+{#if demoActive}
+	<div class="demo-banner">
+		<span class="demo-badge">DEMO MODE</span>
+		<span class="demo-text">Viewing simulated data — connect a backend for live trading</span>
+		<button class="demo-dismiss" on:click={dismissDemo}>×</button>
+	</div>
+{/if}
 
 <!-- Main content -->
 <div class="dashboard-content">
@@ -153,5 +202,46 @@
 		color: var(--text-dim);
 		padding: 20px;
 		text-align: center;
+	}
+
+	.demo-banner {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 8px 16px;
+		background: rgba(255, 111, 0, 0.1);
+		border: 1px solid rgba(255, 111, 0, 0.3);
+		border-radius: 8px;
+		margin: 16px 20px 0;
+	}
+
+	.demo-badge {
+		padding: 2px 8px;
+		background: #ff6f00;
+		color: #0f0f11;
+		border-radius: 4px;
+		font-family: 'Chakra Petch', sans-serif;
+		font-weight: 700;
+		font-size: 0.75rem;
+		letter-spacing: 0.05em;
+	}
+
+	.demo-text {
+		font-family: 'IBM Plex Mono', monospace;
+		font-size: 0.8rem;
+		color: #888;
+	}
+
+	.demo-dismiss {
+		margin-left: auto;
+		background: none;
+		border: none;
+		color: #666;
+		font-size: 1.2rem;
+		cursor: pointer;
+	}
+
+	.demo-dismiss:hover {
+		color: #ff6f00;
 	}
 </style>

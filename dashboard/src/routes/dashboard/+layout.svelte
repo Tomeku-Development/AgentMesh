@@ -79,6 +79,31 @@
 
 	async function handleDashboardTour() {
 		if (!browser) return;
+
+		// If not connected, start demo first
+		const wsStore = await import('$lib/stores/websocket');
+		const { get } = await import('svelte/store');
+
+		if (!get(wsStore.connected)) {
+			const { startDemo, isDemoMode } = await import('$lib/demo/demoEngine');
+			if (!get(isDemoMode)) {
+				const agentStore = await import('$lib/stores/agents');
+				const orderStore = await import('$lib/stores/orders');
+				const metricsStore = await import('$lib/stores/metrics');
+				startDemo({
+					agents: agentStore.agents,
+					orders: orderStore.orders,
+					events: wsStore.events,
+					connected: wsStore.connected,
+					messageCount: wsStore.messageCount,
+					latencySamples: metricsStore.latencySamples,
+					throughputSamples: metricsStore.throughputSamples,
+				});
+				// Wait for demo data to populate
+				await new Promise(resolve => setTimeout(resolve, 2500));
+			}
+		}
+
 		const { startDashboardTour } = await import('$lib/tour/driver');
 		startDashboardTour();
 	}

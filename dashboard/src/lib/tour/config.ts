@@ -102,7 +102,7 @@ export const dashboardTourSteps: TourStep[] = [
 		element: '#tour-agents',
 		popover: {
 			title: 'Swarm Agents',
-			description: 'Each card represents an autonomous agent in the mesh. Color-coded by role: Buyer (orange), Supplier (green), Logistics (blue), Inspector (purple), Oracle (yellow). Watch their status, load, and active orders.',
+			description: 'Each card represents an autonomous agent in the mesh. You can see 6 agents operating: a Buyer sourcing electronics, two Suppliers competing for orders, Logistics handling shipments, an Inspector verifying quality, and an Oracle providing market data. Color-coded by role.',
 			side: 'right',
 			align: 'start',
 		},
@@ -111,7 +111,7 @@ export const dashboardTourSteps: TourStep[] = [
 		element: '#tour-orders',
 		popover: {
 			title: 'Order Pipeline',
-			description: 'Track every order through 7 phases: BID → NEG → CMT → FUL → SHP → INS → SET. Green = complete, orange = active, red = failed. Each order is secured by MESH_CREDIT escrow.',
+			description: 'Track orders through 7 phases: BID → NEG → CMT → FUL → SHP → INS → SET. Notice orders at different stages — some are being negotiated, others shipped, and completed ones are settled with MESH_CREDIT escrow released.',
 			side: 'left',
 			align: 'start',
 		},
@@ -120,7 +120,7 @@ export const dashboardTourSteps: TourStep[] = [
 		element: '#tour-events',
 		popover: {
 			title: 'Event Stream',
-			description: 'Real-time message feed from the MQTT network. See discovery announcements, order negotiations, shipping updates, quality reports, and reputation changes as they happen.',
+			description: 'Watch the live event feed — discovery announcements, bid submissions, counter-offers, shipping updates, quality inspections, and reputation changes. Each event is cryptographically signed and ordered by BFT consensus.',
 			side: 'left',
 			align: 'start',
 		},
@@ -129,7 +129,7 @@ export const dashboardTourSteps: TourStep[] = [
 		element: '#tour-chaos',
 		popover: {
 			title: 'Chaos Controls',
-			description: 'Test MESH self-healing! Kill any agent and watch the network detect the failure, redistribute work to capable peers, and recover — all autonomously within seconds.',
+			description: 'MESH is self-healing! In a live environment, you can kill any agent here and watch the network detect the failure within seconds, redistribute pending work to capable peers, and continue operations seamlessly.',
 			side: 'left',
 			align: 'start',
 		},

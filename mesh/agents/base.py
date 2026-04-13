@@ -17,7 +17,7 @@ from mesh.core.messages import (
     Heartbeat,
     MessageEnvelope,
 )
-from mesh.core.protocol import build_envelope, deserialize_envelope, verify_envelope
+from mesh.core.protocol import build_envelope, verify_envelope
 from mesh.core.registry import PeerRegistry
 from mesh.core.reputation import ReputationEngine
 from mesh.core.state import AgentState, StateMachine
@@ -26,7 +26,6 @@ from mesh.core.topics import (
     DISCOVERY_GOODBYE,
     DISCOVERY_HEARTBEAT,
     HEALTH_ALERTS,
-    MESH_WILDCARD,
 )
 from mesh.core.transport import MeshTransport
 
@@ -255,7 +254,7 @@ class BaseAgent(ABC):
 
     def _handle_announce(self, envelope: MessageEnvelope) -> None:
         p = envelope.payload
-        peer = self.registry.update_from_announce(
+        self.registry.update_from_announce(
             agent_id=p["agent_id"],
             role=p["role"],
             capabilities=p.get("capabilities", []),

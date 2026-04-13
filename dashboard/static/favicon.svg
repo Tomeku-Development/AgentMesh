@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Dark background -->
+  <rect width="48" height="48" rx="6" fill="#0f0f11"/>
+  
+  <!-- Hexagon outline -->
+  <path d="M24 6L42 16v16L24 42L6 32V16L24 6z" fill="none" stroke="#ff6f00" stroke-width="2"/>
+  
+  <!-- Network nodes -->
+  <circle cx="24" cy="14" r="3" fill="#ff6f00"/>
+  <circle cx="14" cy="20" r="3" fill="#ff6f00"/>
+  <circle cx="34" cy="20" r="3" fill="#ff6f00"/>
+  <circle cx="14" cy="32" r="3" fill="#ff6f00"/>
+  <circle cx="34" cy="32" r="3" fill="#ff6f00"/>
+  <circle cx="24" cy="38" r="3" fill="#ff6f00"/>
+  
+  <!-- Connecting lines forming mesh -->
+  <line x1="24" y1="14" x2="14" y2="20" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="24" y1="14" x2="34" y2="20" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="14" y1="20" x2="14" y2="32" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="34" y1="20" x2="34" y2="32" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="14" y1="32" x2="24" y2="38" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="34" y1="32" x2="24" y2="38" stroke="#ff6f00" stroke-width="1.5"/>
+  <line x1="14" y1="20" x2="34" y2="20" stroke="#ff6f00" stroke-width="1.5" opacity="0.6"/>
+  <line x1="14" y1="32" x2="34" y2="32" stroke="#ff6f00" stroke-width="1.5" opacity="0.6"/>
+</svg>

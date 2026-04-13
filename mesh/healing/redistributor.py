@@ -6,7 +6,6 @@ import logging
 
 from mesh.core.messages import RoleRedistribution
 from mesh.core.registry import PeerInfo, PeerRegistry
-from mesh.core.state import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,10 @@ class RoleRedistributor:
             if peer.agent_id == failed_agent_id:
                 continue
             overlap = len(set(peer.capabilities) & set(failed_caps))
-            if overlap > best_overlap or (overlap == best_overlap and peer.load < (best_match.load if best_match else 1.0)):
+            if overlap > best_overlap or (
+                overlap == best_overlap
+                and peer.load < (best_match.load if best_match else 1.0)
+            ):
                 best_match = peer
                 best_overlap = overlap
 
@@ -98,5 +100,8 @@ class RoleRedistributor:
             )
             return redistribution
 
-        logger.warning("No suitable replacement for %s — entering degraded mode", failed_agent_id[:8])
+        logger.warning(
+            "No suitable replacement for %s — entering degraded mode",
+            failed_agent_id[:8],
+        )
         return None

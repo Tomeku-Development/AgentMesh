@@ -6,8 +6,21 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter: adapter({
-			fallback: 'index.html'
-		})
+			pages: 'build',
+			assets: 'build',
+			fallback: '404.html',
+			precompress: false,
+			strict: true
+		}),
+		prerender: {
+			handleHttpError: ({ path, message }) => {
+				// These routes are client-side rendered (SPA) and will 500 during prerender
+				// because they depend on browser APIs. The static adapter with fallback handles them.
+				const ignorePrefixes = ['/docs', '/auth', '/dashboard', '/workspaces'];
+				if (ignorePrefixes.some(p => path.startsWith(p))) return;
+				throw new Error(`${message}: ${path}`);
+			}
+		}
 	}
 };
 

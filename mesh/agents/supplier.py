@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
-import time
 import threading
 
 from mesh.agents.base import BaseAgent
+from mesh.core import topics
 from mesh.core.messages import (
     MessageEnvelope,
     OrderCommit,
@@ -15,10 +16,9 @@ from mesh.core.messages import (
     ShippingRequest,
     SupplierBid,
 )
-from mesh.core import topics
+from mesh.llm.prompts import supplier_bid_prompt, supplier_counter_prompt
+from mesh.llm.router import LLMDisabledError, LLMProviderError, LLMRouter
 from mesh.negotiation.strategies import (
-    AdaptiveStrategy,
-    NegotiationContext,
     StrategyType,
     get_strategy,
 )
@@ -37,6 +37,7 @@ class SupplierAgent(BaseAgent):
         self._committed_orders: dict[str, dict] = {}
         self._strategy = get_strategy(StrategyType.ADAPTIVE)
         self._market_prices: dict[str, float] = {}
+        self._llm_router = LLMRouter(config)
 
     def set_inventory(self, inventory: dict[str, int], costs: dict[str, float]) -> None:
         """Set initial inventory and cost basis."""
@@ -81,40 +82,99 @@ class SupplierAgent(BaseAgent):
         required_caps = payload.get("required_capabilities", [])
 
         # Check if we can fulfill
-        if category not in self.capabilities and not any(c in self.capabilities for c in required_caps):
+        if category not in self.capabilities and not any(
+            c in self.capabilities for c in required_caps
+        ):
             return
 
         available = self._inventory.get(goods, 0)
         if available <= 0:
             return
 
-        # Calculate bid price
+        # Calculate bid price with LLM enhancement
         cost = self._base_costs.get(goods, max_price * 0.7)
         market = self._market_prices.get(goods, max_price * 0.9)
-        margin = random.uniform(0.05, 0.15)
-        bid_price = cost * (1 + margin)
-
-        # Don't bid above max price
-        if bid_price > max_price:
-            bid_price = max_price * random.uniform(0.90, 0.98)
 
         # Get our reputation for this category
         rep_score = self.reputation.get_score(self.agent_id, category)
+
+        # Try LLM first for pricing decision
+        bid_price = None
+        fulfillment_seconds = None
+        llm_used = False
+
+        try:
+            system_prompt, user_prompt = supplier_bid_prompt(
+                goods=goods,
+                cost=cost,
+                market_price=market,
+                inventory=available,
+                active_orders=self._active_orders,
+                quantity_requested=quantity,
+                max_price=max_price,
+                reputation=rep_score,
+            )
+            result = asyncio.run(self._llm_router.complete_json(user_prompt, system_prompt))
+
+            # Parse LLM response
+            should_bid = result.get("accept", result.get("should_bid", True))
+            if should_bid is False:
+                logger.info("[%s] LLM advised not to bid on order %s", self.agent_id, order_id[:8])
+                return
+
+            bid_price = result.get("bid_price")
+            fulfillment_seconds = result.get("estimated_delivery_epochs",
+                                             result.get("fulfillment_estimate_seconds"))
+
+            # Validate LLM output
+            min_price = cost * 0.90  # Don't go below near-cost
+            if (bid_price is not None and bid_price > 0
+                    and bid_price <= max_price
+                    and bid_price >= min_price):
+                llm_used = True
+                logger.info(
+                    "[%s] LLM pricing for order %s: %.2f/unit (reasoning: %s)",
+                    self.agent_id, order_id[:8], bid_price, result.get("reasoning", "N/A")[:50]
+                )
+            else:
+                logger.warning(
+                    "[%s] LLM bid_price %.2f invalid (cost=%.2f, max=%.2f), using fallback",
+                    self.agent_id, bid_price, cost, max_price
+                )
+                bid_price = None
+        except (LLMDisabledError, LLMProviderError, Exception) as e:
+            logger.warning(
+                "[%s] LLM failed for bid pricing: %s, "
+                "using fallback",
+                self.agent_id, str(e)[:100],
+            )
+
+        # Fallback to original logic if LLM didn't provide valid price
+        if bid_price is None:
+            margin = random.uniform(0.05, 0.15)
+            bid_price = cost * (1 + margin)
+
+            # Don't bid above max price
+            if bid_price > max_price:
+                bid_price = max_price * random.uniform(0.90, 0.98)
+
+        if fulfillment_seconds is None:
+            fulfillment_seconds = random.randint(5, 15)
 
         bid = SupplierBid(
             order_id=order_id,
             supplier_id=self.agent_id,
             price_per_unit=round(bid_price, 2),
             available_quantity=min(available, quantity),
-            estimated_fulfillment_seconds=random.randint(5, 15),
+            estimated_fulfillment_seconds=fulfillment_seconds,
             reputation_score=rep_score,
             notes=f"From {self.agent_id[:8]}, {available} in stock",
         )
 
         self.publish(topics.order_bid(order_id), bid)
         logger.info(
-            "[%s] Bid on order %s: %.2f/unit x%d",
-            self.agent_id, order_id[:8], bid_price, min(available, quantity),
+            "[%s] Bid on order %s: %.2f/unit x%d (LLM: %s)",
+            self.agent_id, order_id[:8], bid_price, min(available, quantity), llm_used,
         )
 
     def _handle_counter_offer(self, payload: dict) -> None:
@@ -131,37 +191,144 @@ class SupplierAgent(BaseAgent):
                 goods_category = data.get("category", "")
 
         cost = self._base_costs.get(goods_category, proposed_price * 0.7)
+        market = self._market_prices.get(goods_category, proposed_price)
+        round_num = payload.get("round", 1)
 
-        # Accept if profitable, counter if close, reject if losing money
+        # Try LLM first for counter-offer decision
+        action = None
+        counter_price = None
+        llm_used = False
+
+        try:
+            system_prompt, user_prompt = supplier_counter_prompt(
+                proposed_price=proposed_price,
+                cost=cost,
+                market_price=market,
+                reputation=self.reputation.get_score(self.agent_id, goods_category),
+                round_num=round_num,
+            )
+            result = asyncio.run(self._llm_router.complete_json(user_prompt, system_prompt))
+
+            action = result.get(
+                "action",
+                "counter" if not result.get("accept", False)
+                else "accept",
+            )
+            counter_price = result.get("counter_price")
+            llm_used = True
+            logger.info(
+                "[%s] LLM counter decision for order %s: %s (reasoning: %s)",
+                self.agent_id, order_id[:8], action, result.get("reasoning", "N/A")[:50]
+            )
+        except (LLMDisabledError, LLMProviderError, Exception) as e:
+            logger.warning(
+                "[%s] LLM failed for counter-offer: %s, "
+                "using fallback",
+                self.agent_id, str(e)[:100],
+            )
+
+        from mesh.core.messages import CounterOffer
+
+        # Process LLM decision or use fallback logic
+        if llm_used and action:
+            if action == "accept":
+                # Validate: never accept below cost * 0.90
+                if proposed_price >= cost * 0.90:
+                    response = CounterOffer(
+                        order_id=order_id,
+                        original_bid_id=payload.get("original_bid_id", ""),
+                        from_agent=self.agent_id,
+                        to_agent=payload.get("from_agent", ""),
+                        round=round_num,
+                        proposed_price_per_unit=proposed_price,
+                        justification="Accepted counter-offer (LLM)",
+                    )
+                    self.publish(topics.order_counter(order_id), response)
+                    logger.info(
+                        "[%s] Accepted counter (LLM): "
+                        "%.2f for order %s",
+                        self.agent_id, proposed_price,
+                        order_id[:8],
+                    )
+                    return
+                else:
+                    logger.warning(
+                        "[%s] LLM accept rejected: price %.2f "
+                        "below safety floor %.2f",
+                        self.agent_id, proposed_price,
+                        cost * 0.90,
+                    )
+
+            elif action == "counter" and counter_price is not None:
+                # Validate counter_price: must be > cost * 0.95 and <= proposed_price * 1.5
+                min_counter = cost * 0.95
+                max_counter = proposed_price * 1.5
+                if min_counter <= counter_price <= max_counter:
+                    response = CounterOffer(
+                        order_id=order_id,
+                        original_bid_id=payload.get("original_bid_id", ""),
+                        from_agent=self.agent_id,
+                        to_agent=payload.get("from_agent", ""),
+                        round=round_num + 1,
+                        proposed_price_per_unit=round(counter_price, 2),
+                        justification=f"Counter (LLM): {counter_price:.2f}",
+                    )
+                    self.publish(topics.order_counter(order_id), response)
+                    logger.info(
+                        "[%s] Counter-counter (LLM): "
+                        "%.2f for order %s",
+                        self.agent_id, counter_price,
+                        order_id[:8],
+                    )
+                    return
+                else:
+                    logger.warning(
+                        "[%s] LLM counter_price %.2f out of bounds [%.2f, %.2f], using fallback",
+                        self.agent_id, counter_price, min_counter, max_counter
+                    )
+
+            elif action == "reject":
+                logger.info(
+                    "[%s] Rejected counter-offer (LLM) "
+                    "for order %s",
+                    self.agent_id, order_id[:8],
+                )
+                return
+
+        # Fallback to original logic
         if proposed_price >= cost * 1.05:
             # Accept — still profitable
-            from mesh.core.messages import CounterOffer
             response = CounterOffer(
                 order_id=order_id,
                 original_bid_id=payload.get("original_bid_id", ""),
                 from_agent=self.agent_id,
                 to_agent=payload.get("from_agent", ""),
-                round=payload.get("round", 1),
+                round=round_num,
                 proposed_price_per_unit=proposed_price,
                 justification="Accepted counter-offer",
             )
             self.publish(topics.order_counter(order_id), response)
-            logger.info("[%s] Accepted counter: %.2f for order %s", self.agent_id, proposed_price, order_id[:8])
+            logger.info(
+                "[%s] Accepted counter: %.2f for order %s",
+                self.agent_id, proposed_price, order_id[:8],
+            )
         elif proposed_price >= cost * 0.95:
             # Counter with a middle ground
             middle = (proposed_price + cost * 1.10) / 2
-            from mesh.core.messages import CounterOffer
             response = CounterOffer(
                 order_id=order_id,
                 original_bid_id=payload.get("original_bid_id", ""),
                 from_agent=self.agent_id,
                 to_agent=payload.get("from_agent", ""),
-                round=payload.get("round", 1) + 1,
+                round=round_num + 1,
                 proposed_price_per_unit=round(middle, 2),
                 justification=f"Counter: minimum viable at {middle:.2f}",
             )
             self.publish(topics.order_counter(order_id), response)
-            logger.info("[%s] Counter-counter: %.2f for order %s", self.agent_id, middle, order_id[:8])
+            logger.info(
+                "[%s] Counter-counter: %.2f for order %s",
+                self.agent_id, middle, order_id[:8],
+            )
 
     def _handle_bid_accepted(self, payload: dict) -> None:
         """Our bid was accepted — commit and start fulfillment."""
@@ -186,7 +353,10 @@ class SupplierAgent(BaseAgent):
             estimated_ready_seconds=random.randint(3, 8),
         )
         self.publish(topics.order_commit(order_id), commit)
-        logger.info("[%s] Committed to order %s: %dx%.2f", self.agent_id, order_id[:8], quantity, price)
+        logger.info(
+            "[%s] Committed to order %s: %dx%.2f",
+            self.agent_id, order_id[:8], quantity, price,
+        )
 
         # Schedule fulfillment
         timer = threading.Timer(random.uniform(3, 8), self._fulfill_order, args=[order_id])
@@ -195,7 +365,11 @@ class SupplierAgent(BaseAgent):
 
     def _handle_bid_rejected(self, payload: dict) -> None:
         if payload.get("supplier_id") == self.agent_id:
-            logger.info("[%s] Bid rejected for order %s", self.agent_id, payload.get("order_id", "")[:8])
+            logger.info(
+                "[%s] Bid rejected for order %s",
+                self.agent_id,
+                payload.get("order_id", "")[:8],
+            )
 
     def _fulfill_order(self, order_id: str) -> None:
         """Simulate order fulfillment and request shipping."""

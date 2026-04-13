@@ -3,7 +3,7 @@
 	import { sendCommand } from '$lib/stores/websocket';
 	import { roleColor, roleIcon } from '$lib/utils/colors';
 
-	let { agents }: { agents: AgentInfo[] } = $props();
+	export let agents: AgentInfo[];
 
 	function killAgent(id: string) {
 		sendCommand('kill_agent', id);
@@ -26,13 +26,13 @@
 				</div>
 				<div class="btn-group">
 					{#if agent.status === 'dead'}
-						<button class="btn btn-restart" onclick={() => restartAgent(agent.id)}>
+						<button class="btn btn-restart" on:click={() => restartAgent(agent.id)}>
 							RESTART
 						</button>
 					{:else}
 						<button
 							class="btn btn-kill"
-							onclick={() => killAgent(agent.id)}
+							on:click={() => killAgent(agent.id)}
 							disabled={agent.status === 'dead'}
 						>
 							KILL

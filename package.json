@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "fern": "/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/fern",
+    "fern:check": "/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/fern check",
+    "fern:dev": "/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/fern docs dev",
+    "fern:publish": "/opt/homebrew/opt/node@22/bin/node ./node_modules/.bin/fern docs publish"
+  },
+  "devDependencies": {
+    "fern-api": "^0.46.2"
+  }
+}

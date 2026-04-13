@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import time
 import threading
-import uuid
 
 from mesh.agents.base import BaseAgent
+from mesh.core import topics
 from mesh.core.messages import (
     BidAcceptance,
     BidRejection,
@@ -15,10 +15,10 @@ from mesh.core.messages import (
     MessageEnvelope,
     OrderStatus,
     PurchaseOrderRequest,
-    ShippingRequest,
     SupplierBid,
 )
-from mesh.core import topics
+from mesh.llm.prompts import buyer_evaluate_bids_prompt, buyer_settlement_prompt
+from mesh.llm.router import LLMDisabledError, LLMProviderError, LLMRouter
 from mesh.negotiation.engine import NegotiationEngine
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ class BuyerAgent(BaseAgent):
         self._pending_orders: dict[str, PurchaseOrderRequest] = {}
         self._order_timers: dict[str, threading.Timer] = {}
         self._market_prices: dict[str, float] = {}
+        self._llm_router = LLMRouter(config)
 
     def _subscribe_topics(self) -> None:
         self.transport.subscribe("mesh/orders/+/bid", qos=1)
@@ -140,22 +141,93 @@ class BuyerAgent(BaseAgent):
             self._cancel_order(order_id, "No bids received")
             return
 
-        def score_fn(bid):
-            cs = self.reputation.get_score(bid.supplier_id, session.quality_threshold and "")
-            rep_score = self.reputation.get_score(
-                bid.supplier_id,
-                self._pending_orders[order_id].category if order_id in self._pending_orders else "",
-            )
-            return self.reputation.score_bid(
-                price=bid.price_per_unit,
-                max_price=session.max_price,
-                reputation=rep_score,
-                estimated_time=bid.estimated_fulfillment_seconds,
-                deadline=self._pending_orders.get(order_id, PurchaseOrderRequest(goods="", category="", quantity=0, max_price_per_unit=0)).delivery_deadline_seconds,
-                confidence=0.5,
+        # Try LLM-based bid evaluation first
+        best_bid = None
+        should_counter = False
+        llm_evaluated = False
+
+        try:
+            # Build bids data for LLM
+            bids_data = []
+            for bid in session.bids:
+                rep_score = self.reputation.get_score(
+                    bid.supplier_id,
+                    self._pending_orders[order_id].category
+                    if order_id in self._pending_orders else "",
+                )
+                bids_data.append({
+                    "bid_id": bid.bid_id,
+                    "supplier_id": bid.supplier_id,
+                    "price_per_unit": bid.price_per_unit,
+                    "reputation_score": rep_score,
+                    "estimated_fulfillment_seconds": bid.estimated_fulfillment_seconds,
+                    "available_quantity": bid.available_quantity,
+                })
+
+            market_price = self._market_prices.get(
+                self._pending_orders[order_id].goods if order_id in self._pending_orders else "",
+                session.max_price * 0.9,
             )
 
-        best_bid, should_counter = self.negotiation.evaluate_bids(order_id, score_fn)
+            system_prompt, user_prompt = buyer_evaluate_bids_prompt(
+                bids=bids_data,
+                market_price=market_price,
+                max_price=session.max_price,
+                quality_threshold=session.quality_threshold,
+            )
+
+            result = asyncio.run(
+                self._llm_router.complete_json(user_prompt, system_prompt)
+            )
+
+            # Parse LLM result
+            ranked_bids = result.get("ranked_bids", [])
+            llm_should_counter = result.get("should_counter", False)
+
+            if ranked_bids and len(ranked_bids) > 0:
+                # Find the best bid by matching bid_id
+                best_bid_id = ranked_bids[0].get("bid_id")
+                for bid in session.bids:
+                    if bid.bid_id == best_bid_id:
+                        best_bid = bid
+                        should_counter = llm_should_counter
+                        llm_evaluated = True
+                        logger.info(
+                            "[%s] LLM evaluated bids for order %s: "
+                            "selected %s (score: %.2f, reasoning: %s)",
+                            self.agent_id, order_id[:8], best_bid_id[:8],
+                            ranked_bids[0].get("score", 0),
+                            ranked_bids[0].get("reasoning", "N/A")[:50],
+                        )
+                        break
+
+        except (LLMDisabledError, LLMProviderError, Exception) as e:
+            logger.warning("[%s] LLM bid evaluation failed, using fallback: %s", self.agent_id, e)
+
+        # Fallback to original scoring if LLM didn't work
+        if not llm_evaluated:
+            def score_fn(bid):
+                rep_score = self.reputation.get_score(
+                    bid.supplier_id,
+                    self._pending_orders[order_id].category
+                    if order_id in self._pending_orders else "",
+                )
+                return self.reputation.score_bid(
+                    price=bid.price_per_unit,
+                    max_price=session.max_price,
+                    reputation=rep_score,
+                    estimated_time=bid.estimated_fulfillment_seconds,
+                    deadline=self._pending_orders.get(
+                        order_id,
+                        PurchaseOrderRequest(
+                            goods="", category="",
+                            quantity=0, max_price_per_unit=0,
+                        ),
+                    ).delivery_deadline_seconds,
+                    confidence=0.5,
+                )
+
+            best_bid, should_counter = self.negotiation.evaluate_bids(order_id, score_fn)
 
         if not best_bid:
             self._cancel_order(order_id, "No valid bids")
@@ -200,8 +272,63 @@ class BuyerAgent(BaseAgent):
             return
 
         # If this is a supplier counter-counter, decide whether to accept
-        if proposed_price <= session.max_price:
-            # Acceptable — accept this counter
+        accept = False
+
+        # Try LLM-based decision
+        try:
+            market_price = self._market_prices.get(
+                self._pending_orders[order_id].goods if order_id in self._pending_orders else "",
+                session.max_price * 0.9,
+            )
+            # Build context for LLM
+            context = {
+                "role": "buyer",
+                "target_price": session.max_price,
+                "round": session.current_round if hasattr(session, "current_round") else 1,
+                "max_rounds": self.config.negotiate_max_rounds,
+            }
+
+            from mesh.llm.prompts import negotiation_counter_prompt
+            system_prompt, user_prompt = negotiation_counter_prompt(
+                context=context,
+                their_price=proposed_price,
+                market_history=[market_price] if market_price else [session.max_price * 0.9],
+            )
+
+            result = asyncio.run(
+                self._llm_router.complete_json(user_prompt, system_prompt)
+            )
+
+            llm_accept = result.get("accept", False)
+            reasoning = result.get("reasoning", "")
+
+            # If LLM says accept, or safety override (price is really good)
+            if llm_accept:
+                accept = True
+                logger.info(
+                    "[%s] LLM accepted counter-counter for order %s: %.2f (reasoning: %s)",
+                    self.agent_id, order_id[:8], proposed_price, reasoning[:50],
+                )
+            elif proposed_price <= session.max_price * 0.98:
+                # Safety override: price is close enough to max, accept anyway
+                accept = True
+                logger.info(
+                    "[%s] LLM rejected but safety override for order %s: %.2f <= %.2f",
+                    self.agent_id, order_id[:8], proposed_price, session.max_price * 0.98,
+                )
+            else:
+                logger.info(
+                    "[%s] LLM rejected counter-counter for order %s: %.2f (reasoning: %s)",
+                    self.agent_id, order_id[:8], proposed_price, reasoning[:50],
+                )
+
+        except (LLMDisabledError, LLMProviderError, Exception) as e:
+            logger.warning("[%s] LLM counter decision failed, using fallback: %s", self.agent_id, e)
+            # Fallback to original logic
+            accept = proposed_price <= session.max_price
+
+        if accept:
+            # Accept this counter
             for bid in session.bids:
                 if bid.supplier_id == from_agent:
                     bid.price_per_unit = proposed_price
@@ -311,10 +438,57 @@ class BuyerAgent(BaseAgent):
 
         if passed or payload.get("recommendation") == "partial_accept":
             # Settlement: pay supplier, logistics, inspector
-            supplier_payment = agreed_price * quantity_verified * 0.92
+            # Default values (fallback)
+            supplier_percentage = 0.92
             inspector_fee = 5.0
-            burn_amount = agreed_price * quantity_verified * 0.03
-            logistics_fee = 15.0  # Will be replaced with actual shipping bid
+            burn_percentage = 0.03
+            logistics_fee = 15.0
+
+            # Try LLM-based settlement calculation
+            try:
+                system_prompt, user_prompt = buyer_settlement_prompt(
+                    agreed_price=agreed_price,
+                    quantity=quantity_verified,
+                    quality_score=quality_score,
+                    on_time=True,  # Assuming on-time for now
+                )
+
+                result = asyncio.run(
+                    self._llm_router.complete_json(user_prompt, system_prompt)
+                )
+
+                # Extract and validate LLM values
+                llm_supplier_pct = result.get("supplier_percentage", supplier_percentage)
+                llm_inspector_fee = result.get("inspector_fee", inspector_fee)
+                llm_burn_pct = result.get("burn_percentage", burn_percentage)
+                llm_logistics_fee = result.get("logistics_fee", logistics_fee)
+
+                # Validate bounds
+                if 0.80 <= llm_supplier_pct <= 0.95:
+                    supplier_percentage = llm_supplier_pct
+                if 1.0 <= llm_inspector_fee <= 20.0:
+                    inspector_fee = llm_inspector_fee
+                if 0.01 <= llm_burn_pct <= 0.10:
+                    burn_percentage = llm_burn_pct
+                if 5.0 <= llm_logistics_fee <= 50.0:
+                    logistics_fee = llm_logistics_fee
+
+                logger.info(
+                    "[%s] LLM settlement for order %s: "
+                    "supplier_pct=%.2f, inspector=%.2f, "
+                    "burn_pct=%.3f, reasoning=%s",
+                    self.agent_id, order_id[:8],
+                    supplier_percentage, inspector_fee,
+                    burn_percentage,
+                    result.get("reasoning", "N/A")[:50],
+                )
+
+            except (LLMDisabledError, LLMProviderError, Exception) as e:
+                logger.warning("[%s] LLM settlement failed, using defaults: %s", self.agent_id, e)
+
+            # Calculate final amounts
+            supplier_payment = agreed_price * quantity_verified * supplier_percentage
+            burn_amount = agreed_price * quantity_verified * burn_percentage
 
             try:
                 self.ledger.escrow_release(order_id, [

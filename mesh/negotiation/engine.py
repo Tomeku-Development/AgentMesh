@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from mesh.core.messages import CounterOffer, SupplierBid
+from mesh.llm.prompts import buyer_evaluate_bids_prompt
+from mesh.llm.router import LLMDisabledError, LLMProviderError, LLMRouter
 from mesh.negotiation.strategies import (
-    AdaptiveStrategy,
-    BiddingStrategy,
     NegotiationContext,
     StrategyType,
     get_strategy,
@@ -86,9 +88,15 @@ class NegotiationEngine:
     decides whether to accept or counter, and tracks the multi-round process.
     """
 
-    def __init__(self, strategy_type: StrategyType = StrategyType.ADAPTIVE) -> None:
+    def __init__(
+        self,
+        strategy_type: StrategyType = StrategyType.ADAPTIVE,
+        llm_router: LLMRouter | None = None,
+    ) -> None:
         self._sessions: dict[str, NegotiationSession] = {}
-        self._strategy = get_strategy(strategy_type)
+        self._llm_router = llm_router
+        self._strategy = get_strategy(strategy_type, llm_router)
+        self._logger = logging.getLogger(__name__)
 
     def create_session(
         self,
@@ -140,7 +148,56 @@ class NegotiationEngine:
 
         session.state = NegotiationState.EVALUATING
 
-        # Score and sort bids
+        # Try LLM-based evaluation if router is available
+        if self._llm_router is not None:
+            try:
+                bids_data = [
+                    {
+                        "bid_id": bid.bid_id,
+                        "supplier_id": bid.supplier_id,
+                        "price_per_unit": bid.price_per_unit,
+                        "reputation_score": bid.reputation_score,
+                        "estimated_fulfillment_seconds": bid.estimated_fulfillment_seconds,
+                    }
+                    for bid in session.bids
+                ]
+                system_prompt, user_prompt = buyer_evaluate_bids_prompt(
+                    bids_data,
+                    session.market_price,
+                    session.max_price,
+                    session.quality_threshold,
+                )
+                result = asyncio.run(self._llm_router.complete_json(user_prompt, system_prompt))
+
+                # Parse result - expect {ranked_bids, should_counter, reasoning}
+                ranked_bids = result.get("ranked_bids", [])
+                should_counter = result.get("should_counter", False)
+
+                # Validate bid_ids and scores
+                valid_bids = {bid.bid_id: bid for bid in session.bids}
+                for ranked in ranked_bids:
+                    bid_id = ranked.get("bid_id")
+                    score = ranked.get("score")
+                    if bid_id in valid_bids and isinstance(score, (int, float)):
+                        best_bid = valid_bids[bid_id]
+                        self._logger.info(
+                            "LLM bid evaluation: selected %s with score %.2f (%s)",
+                            bid_id,
+                            float(score),
+                            ranked.get("reasoning", ""),
+                        )
+                        return best_bid, should_counter
+
+                self._logger.warning("LLM evaluation returned no valid bids, falling back")
+            except (LLMDisabledError, LLMProviderError, ValueError, KeyError) as e:
+                self._logger.warning(
+                    "LLM bid evaluation failed, "
+                    "using deterministic fallback: %s", e,
+                )
+            except Exception as e:
+                self._logger.warning("LLM bid evaluation error: %s", e)
+
+        # Fallback: Score and sort bids deterministically
         if score_fn:
             scored = [(score_fn(bid), bid) for bid in session.bids]
         else:
@@ -204,7 +261,11 @@ class NegotiationEngine:
             round=round_entry.round_number,
             proposed_price_per_unit=round(counter_price, 2),
             proposed_quantity=target_bid.available_quantity,
-            justification=f"Market price is {session.market_price:.2f}; round {round_entry.round_number}/{session.max_rounds}",
+            justification=(
+                f"Market price is {session.market_price:.2f}; "
+                f"round {round_entry.round_number}"
+                f"/{session.max_rounds}"
+            ),
         )
 
     def process_counter_response(

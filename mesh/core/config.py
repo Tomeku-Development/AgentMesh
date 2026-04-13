@@ -45,6 +45,25 @@ class MeshConfig(BaseSettings):
     scenario: str = "electronics"
     log_level: str = "INFO"
 
+    # ── LLM Provider ──────────────────────────────────
+    llm_enabled: bool = True                           # kill switch for all LLM calls
+    llm_primary_provider: str = "bedrock"              # "bedrock" | "openrouter" | "none"
+    llm_fallback_provider: str = "openrouter"          # fallback when primary fails
+    llm_model: str = "anthropic.claude-3-sonnet-20240229-v1:0"
+    llm_fallback_model: str = "anthropic/claude-3-haiku"
+    llm_temperature: float = 0.3
+    llm_max_tokens: int = 1024
+    llm_timeout: float = 10.0                          # seconds per LLM call
+
+    # Bedrock
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+
+    # OpenRouter
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
     def get_capabilities(self) -> list[str]:
         """Parse comma-separated capabilities into list."""
         if not self.capabilities:

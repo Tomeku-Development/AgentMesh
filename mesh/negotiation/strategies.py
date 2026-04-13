@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import enum
-import random
+import logging
 from dataclasses import dataclass
+
+from mesh.llm.prompts import negotiation_counter_prompt
+from mesh.llm.router import LLMRouter
 
 
 class StrategyType(str, enum.Enum):
     AGGRESSIVE = "aggressive"      # Low counter-offers, maximize savings
     CONSERVATIVE = "conservative"  # Small adjustments, prioritize deal completion
     ADAPTIVE = "adaptive"          # Adjusts based on market and competition
+    LLM = "llm"                    # Uses LLM for dynamic counter-offer computation
 
 
 @dataclass
@@ -85,6 +90,44 @@ class AdaptiveStrategy(BiddingStrategy):
             return their_price * (1 - min(0.15, discount))
 
 
+class LLMStrategy(BiddingStrategy):
+    """Uses LLM for dynamic counter-offer computation."""
+
+    def __init__(self, llm_router: LLMRouter):
+        self._llm_router = llm_router
+        self._fallback = AdaptiveStrategy()
+        self._logger = logging.getLogger(__name__)
+
+    def compute_counter(self, ctx: NegotiationContext, their_price: float) -> float:
+        try:
+            context_dict = {
+                "my_role": ctx.my_role,
+                "original_price": ctx.original_price,
+                "max_price": ctx.max_price,
+                "market_price": ctx.market_price,
+                "num_competing_bids": ctx.num_competing_bids,
+                "current_round": ctx.current_round,
+                "max_rounds": ctx.max_rounds,
+                "my_reputation": ctx.my_reputation,
+                "counterparty_reputation": ctx.counterparty_reputation,
+            }
+            system_prompt, user_prompt = negotiation_counter_prompt(context_dict, their_price, [])
+            result = asyncio.run(self._llm_router.complete_json(user_prompt, system_prompt))
+            counter_price = float(result["counter_price"])
+            # Safety bounds
+            floor = ctx.market_price * 0.80
+            ceiling = ctx.max_price
+            counter_price = max(floor, min(ceiling, counter_price))
+            self._logger.info(
+                "LLM negotiation counter: %.2f (raw: %s)",
+                counter_price, result.get("reasoning", ""),
+            )
+            return counter_price
+        except Exception as e:
+            self._logger.warning("LLM negotiation failed, using adaptive fallback: %s", e)
+            return self._fallback.compute_counter(ctx, their_price)
+
+
 STRATEGY_MAP: dict[StrategyType, type[BiddingStrategy]] = {
     StrategyType.AGGRESSIVE: AggressiveStrategy,
     StrategyType.CONSERVATIVE: ConservativeStrategy,
@@ -92,6 +135,13 @@ STRATEGY_MAP: dict[StrategyType, type[BiddingStrategy]] = {
 }
 
 
-def get_strategy(strategy_type: StrategyType) -> BiddingStrategy:
+def get_strategy(
+    strategy_type: StrategyType,
+    llm_router: LLMRouter | None = None,
+) -> BiddingStrategy:
     """Factory to get a strategy instance."""
+    if strategy_type == StrategyType.LLM:
+        if llm_router is None:
+            return AdaptiveStrategy()  # fallback if no router
+        return LLMStrategy(llm_router)
     return STRATEGY_MAP[strategy_type]()

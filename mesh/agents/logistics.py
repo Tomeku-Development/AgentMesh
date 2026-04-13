@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
-import time
 import threading
+import time
 
 from mesh.agents.base import BaseAgent
+from mesh.core import topics
 from mesh.core.messages import (
     MessageEnvelope,
     ShippingAssign,
     ShippingBid,
     TransitUpdate,
 )
-from mesh.core import topics
+from mesh.llm.prompts import logistics_pricing_prompt
+from mesh.llm.router import LLMDisabledError, LLMProviderError, LLMRouter
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,7 @@ class LogisticsAgent(BaseAgent):
         super().__init__(config, identity, ledger, reputation)
         self._active_shipments: dict[str, dict] = {}
         self._vehicle_type = "truck"
+        self._llm_router = LLMRouter(config)
 
     def _subscribe_topics(self) -> None:
         self.transport.subscribe("mesh/shipping/+/request", qos=1)
@@ -47,12 +51,71 @@ class LogisticsAgent(BaseAgent):
         weight = payload.get("weight_kg", 10)
         fragile = payload.get("fragile", False)
         deadline = payload.get("deadline_seconds", 30)
+        origin = payload.get("origin", "unknown")
+        destination = payload.get("destination", "unknown")
 
-        # Calculate shipping cost
-        base_rate = 2.0  # per kg
-        fragile_surcharge = 1.5 if fragile else 1.0
-        price = round(weight * base_rate * fragile_surcharge * random.uniform(0.9, 1.1), 2)
-        transit_time = random.randint(5, 15)
+        # Try LLM first for pricing decision
+        price = None
+        transit_time = None
+        llm_used = False
+
+        try:
+            system_prompt, user_prompt = logistics_pricing_prompt(
+                weight=weight,
+                fragile=fragile,
+                origin=origin,
+                destination=destination,
+                deadline=deadline,
+                current_load=self._active_orders,
+                vehicle_type=self._vehicle_type,
+            )
+            result = asyncio.run(self._llm_router.complete_json(user_prompt, system_prompt))
+
+            llm_price = result.get("price")
+            llm_transit = result.get("estimated_epochs", result.get("estimated_transit_seconds"))
+
+            # Validate LLM output
+            min_price = weight * 1.0  # minimum rate
+            max_price = weight * 10.0  # sanity cap
+
+            if llm_price is not None and min_price <= llm_price <= max_price:
+                price = round(llm_price, 2)
+                llm_used = True
+                logger.info(
+                    "[%s] LLM pricing for shipment %s: $%.2f (reasoning: %s)",
+                    self.agent_id, shipment_id[:8], price, result.get("reasoning", "N/A")[:50]
+                )
+            else:
+                logger.warning(
+                    "[%s] LLM price %.2f invalid "
+                    "(weight=%.1f, bounds=[%.2f, %.2f]), "
+                    "using fallback",
+                    self.agent_id, llm_price, weight, min_price, max_price
+                )
+
+            if llm_transit is not None and 0 < llm_transit <= deadline:
+                transit_time = int(llm_transit)
+            elif llm_transit is not None:
+                logger.warning(
+                    "[%s] LLM transit %d invalid (deadline=%d), using fallback",
+                    self.agent_id, llm_transit, deadline
+                )
+
+        except (LLMDisabledError, LLMProviderError, Exception) as e:
+            logger.warning(
+                "[%s] LLM failed for shipping pricing: %s, "
+                "using fallback",
+                self.agent_id, str(e)[:100],
+            )
+
+        # Fallback to original calculation if LLM didn't provide valid price
+        if price is None:
+            base_rate = 2.0  # per kg
+            fragile_surcharge = 1.5 if fragile else 1.0
+            price = round(weight * base_rate * fragile_surcharge * random.uniform(0.9, 1.1), 2)
+
+        if transit_time is None:
+            transit_time = random.randint(5, 15)
 
         bid = ShippingBid(
             shipment_id=shipment_id,
@@ -62,7 +125,10 @@ class LogisticsAgent(BaseAgent):
             vehicle_type=self._vehicle_type,
         )
         self.publish(topics.shipping_bid(shipment_id), bid)
-        logger.info("[%s] Shipping bid for %s: $%.2f, %ds", self.agent_id, shipment_id[:8], price, transit_time)
+        logger.info(
+            "[%s] Shipping bid for %s: $%.2f, %ds (LLM: %s)",
+            self.agent_id, shipment_id[:8], price, transit_time, llm_used
+        )
 
         # Auto-assign (since we're the only logistics agent in demo)
         # In production, supplier would pick best bid
@@ -96,7 +162,10 @@ class LogisticsAgent(BaseAgent):
         }
         self._active_orders += 1
 
-        logger.info("[%s] Assigned shipment %s for order %s", self.agent_id, shipment_id[:8], order_id[:8])
+        logger.info(
+            "[%s] Assigned shipment %s for order %s",
+            self.agent_id, shipment_id[:8], order_id[:8],
+        )
 
         # Simulate transit phases
         thread = threading.Thread(

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { MeshEvent } from '$lib/stores/websocket';
 
-	let { events }: { events: MeshEvent[] } = $props();
+	export let events: MeshEvent[];
 
 	function topicShort(topic: string): string {
 		return topic.replace('mesh/', '');

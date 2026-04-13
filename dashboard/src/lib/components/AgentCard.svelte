@@ -2,7 +2,7 @@
 	import type { AgentInfo } from '$lib/stores/agents';
 	import { roleColor, statusColor, roleIcon } from '$lib/utils/colors';
 
-	let { agent }: { agent: AgentInfo } = $props();
+	export let agent: AgentInfo;
 
 	function uptimeStr(seconds: number): string {
 		if (seconds < 60) return `${seconds.toFixed(0)}s`;

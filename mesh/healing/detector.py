@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
 from mesh.core.messages import HealthAlert
 from mesh.core.registry import PeerRegistry
 from mesh.core.state import AgentState
+from mesh.llm.prompts import healing_analysis_prompt
+from mesh.llm.router import LLMDisabledError, LLMProviderError, LLMRouter
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +27,12 @@ class FailureDetector:
         my_agent_id: str,
         registry: PeerRegistry,
         heartbeat_interval: float = 5.0,
+        llm_router: LLMRouter | None = None,
     ) -> None:
         self._my_id = my_agent_id
         self._registry = registry
         self._heartbeat_interval = heartbeat_interval
+        self._llm_router = llm_router
         self._confirmed_dead: set[str] = set()
         self._death_votes: dict[str, set[str]] = {}  # agent_id -> set of voters
 
@@ -84,6 +89,55 @@ class FailureDetector:
                     "Death confirmed for %s (votes: %d)",
                     alert.suspect_agent_id, votes,
                 )
+
+                # Try LLM analysis for recovery recommendation
+                if self._llm_router is not None:
+                    try:
+                        peer = self._registry.get(alert.suspect_agent_id)
+                        peer_role = peer.role if peer else "unknown"
+                        active_orders = (
+                            peer.active_orders
+                            if peer and hasattr(peer, "active_orders")
+                            else 0
+                        )
+
+                        # Get mesh size from registry
+                        mesh_size = (
+                            len(self._registry.list_agents())
+                            if hasattr(self._registry, "list_agents")
+                            else 1
+                        )
+
+                        system_prompt, user_prompt = healing_analysis_prompt(
+                            agent_role=peer_role,
+                            active_orders=active_orders,
+                            mesh_state={"mesh_size": mesh_size},
+                            failure_history=[],
+                        )
+
+                        result = asyncio.run(
+                            self._llm_router.complete_json(user_prompt, system_prompt)
+                        )
+
+                        # Validate recommended_action
+                        recommended_action = result.get("recommended_action", "redistribute")
+                        if recommended_action not in ["redistribute", "wait", "escalate"]:
+                            recommended_action = "redistribute"
+
+                        logger.info(
+                            "LLM healing analysis for %s: action=%s, severity=%s, reasoning=%s",
+                            alert.suspect_agent_id[:8],
+                            recommended_action,
+                            result.get("severity", "unknown"),
+                            result.get("diagnosis", "N/A")[:50],
+                        )
+
+                        # Store analysis on alert for downstream use
+                        alert.llm_analysis = result
+
+                    except (LLMDisabledError, LLMProviderError, Exception) as e:
+                        logger.warning("LLM healing analysis failed: %s", e)
+
                 return True
         return False
 

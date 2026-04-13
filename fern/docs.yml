@@ -12,8 +12,6 @@ colors:
   background:
     dark: "#0F1117"
 
-favicon: ./assets/favicon.ico
-
 navbar-links:
   - type: secondary
     text: GitHub
@@ -21,6 +19,14 @@ navbar-links:
   - type: primary
     text: Get Started
     url: https://agentmesh.world
+
+tabs:
+  docs:
+    display-name: Docs
+    icon: home
+  api:
+    display-name: API Reference
+    icon: puzzle
 
 navigation:
   - tab: docs
@@ -80,8 +86,5 @@ navigation:
           - page: WebSocket Protocol
             path: ./pages/protocol/websocket.mdx
   - tab: api
-    title: API Reference
     layout:
       - api: openapi/openapi.json
-        slug: rest
-        title: REST API

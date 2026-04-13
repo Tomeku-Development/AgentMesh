@@ -1,0 +1,7 @@
+default-group: docs
+groups:
+  docs:
+    generators: []
+api:
+  specs:
+    - openapi: openapi/openapi.json

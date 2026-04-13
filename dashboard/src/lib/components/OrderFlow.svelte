@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { OrderInfo } from '$lib/stores/orders';
 
-	let { orders }: { orders: OrderInfo[] } = $props();
+	export let orders: OrderInfo[];
 
 	const phases = ['bidding', 'negotiating', 'committed', 'fulfilling', 'shipping', 'inspecting', 'settled'];
 	const phaseLabels = ['BID', 'NEG', 'CMT', 'FUL', 'SHP', 'INS', 'SET'];

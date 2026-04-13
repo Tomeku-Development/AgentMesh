@@ -1,7 +1,10 @@
 services:
   # ── FoxMQ BFT Cluster (4 nodes) ────────────────────
   foxmq-node1:
-    build: ./foxmq
+    build:
+      context: ./foxmq
+      platforms:
+        - linux/amd64
     container_name: mesh-foxmq-1
     command: >
       sh -c "
@@ -26,7 +29,10 @@ services:
       retries: 5
 
   foxmq-node2:
-    build: ./foxmq
+    build:
+      context: ./foxmq
+      platforms:
+        - linux/amd64
     container_name: mesh-foxmq-2
     command: >
       sh -c "
@@ -42,7 +48,10 @@ services:
         condition: service_healthy
 
   foxmq-node3:
-    build: ./foxmq
+    build:
+      context: ./foxmq
+      platforms:
+        - linux/amd64
     container_name: mesh-foxmq-3
     command: >
       sh -c "
@@ -58,7 +67,10 @@ services:
         condition: service_healthy
 
   foxmq-node4:
-    build: ./foxmq
+    build:
+      context: ./foxmq
+      platforms:
+        - linux/amd64
     container_name: mesh-foxmq-4
     command: >
       sh -c "

@@ -6,7 +6,7 @@ COPY mesh/ /app/mesh/
 COPY bridge/ /app/bridge/
 COPY mesh/pyproject.toml /app/mesh/pyproject.toml
 
-RUN pip install --no-cache-dir paho-mqtt pydantic pydantic-settings PyNaCl websockets
+RUN pip install --no-cache-dir paho-mqtt pydantic pydantic-settings PyNaCl websockets boto3 httpx
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1

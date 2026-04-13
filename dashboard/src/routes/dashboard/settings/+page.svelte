@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import { getAPIKeys, createAPIKey, revokeAPIKey } from '$lib/api/apikeys';
 	import { activeWorkspaceId } from '$lib/stores/workspace';
 	import { get } from 'svelte/store';
@@ -16,6 +17,7 @@
 	let generatedKey: APIKeyCreated | null = null;
 	let revoking: string | null = null;
 	let confirmRevoke: string | null = null;
+	let tourReset = false;
 
 	$: workspaceId = get(activeWorkspaceId) || 'default';
 
@@ -95,6 +97,20 @@
 
 	function formatScopes(scopes: string): string[] {
 		return scopes ? scopes.split(',').map(s => s.trim()) : [];
+	}
+
+	async function startTour() {
+		if (!browser) return;
+		const { startDashboardTour } = await import('$lib/tour/driver');
+		startDashboardTour();
+	}
+
+	async function resetTour() {
+		if (!browser) return;
+		const { resetTourState } = await import('$lib/tour/driver');
+		resetTourState();
+		tourReset = true;
+		setTimeout(() => tourReset = false, 3000);
 	}
 </script>
 
@@ -332,6 +348,19 @@
 			Manage Configuration
 		</a>
 	</section>
+
+	<!-- Demo Tour section -->
+	<section class="demo-tour-section">
+		<h2>Demo Tour</h2>
+		<p class="subtitle">Interactive guided walkthrough of the MESH platform</p>
+		<div class="section-actions">
+			<button class="btn btn-primary" on:click={startTour}>Start Dashboard Tour</button>
+			<button class="btn btn-secondary" on:click={resetTour}>Reset Tour (Show Again on Next Visit)</button>
+		</div>
+		{#if tourReset}
+			<p class="reset-confirmation">Tour reset! The guide will appear on your next visit.</p>
+		{/if}
+	</section>
 </div>
 
 <style>
@@ -377,6 +406,60 @@
 		margin-top: 32px;
 		padding-top: 32px;
 		border-top: 1px solid var(--border);
+	}
+
+	/* Demo Tour Section */
+	.demo-tour-section {
+		margin-top: 32px;
+		padding-top: 32px;
+		border-top: 1px solid var(--border);
+	}
+
+	.section-actions {
+		display: flex;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 20px;
+		border-radius: 3px;
+		font-family: var(--font-heading);
+		font-size: 0.8rem;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		border: none;
+	}
+
+	.btn-primary {
+		background: var(--accent);
+		color: #fff;
+	}
+
+	.btn-primary:hover {
+		background: var(--accent-hover);
+	}
+
+	.btn-secondary {
+		background: transparent;
+		color: var(--text-secondary);
+		border: 1px solid var(--border);
+	}
+
+	.btn-secondary:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+
+	.reset-confirmation {
+		margin-top: 12px;
+		font-size: 0.875rem;
+		color: var(--green);
 	}
 
 	.manage-link {

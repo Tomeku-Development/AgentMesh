@@ -14,7 +14,7 @@
 	}
 </script>
 
-<div class="controls">
+<div class="controls" id="tour-chaos">
 	<p class="hint">Trigger chaos events during the demo to test self-healing:</p>
 	<div class="button-grid">
 		{#each agents as agent (agent.id)}

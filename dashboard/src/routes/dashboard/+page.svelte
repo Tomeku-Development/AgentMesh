@@ -32,7 +32,7 @@
 					<h2>Swarm Agents</h2>
 					<span class="panel-badge">{$agentList.length}</span>
 				</div>
-				<div class="agent-grid">
+				<div class="agent-grid" id="tour-agents">
 					{#each $agentList as agent (agent.id)}
 						<AgentCard {agent} />
 					{/each}

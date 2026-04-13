@@ -34,9 +34,12 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import TourStyles from '$lib/tour/TourStyles.svelte';
 
   let mobileMenuOpen = false;
   let visibleSections = new Set<string>();
+  let showTourButton = false;
 
   onMount(() => {
     const observer = new IntersectionObserver(
@@ -55,8 +58,28 @@
       observer.observe(section);
     });
 
+    // Initialize tour
+    initTour();
+
     return () => observer.disconnect();
   });
+
+  async function initTour() {
+    if (!browser) return;
+    const { startLandingTour, shouldShowLandingTour } = await import('$lib/tour/driver');
+    showTourButton = true;
+
+    // Auto-start tour on first visit (with 1.5s delay for page to render)
+    if (shouldShowLandingTour()) {
+      setTimeout(() => startLandingTour(), 1500);
+    }
+  }
+
+  async function handleTour() {
+    if (!browser) return;
+    const { startLandingTour } = await import('$lib/tour/driver');
+    startLandingTour();
+  }
 
   function scrollToSection(id: string) {
     const element = document.getElementById(id);
@@ -203,7 +226,7 @@
       LLM-powered negotiation, and cryptographic trust — all without central authority.
     </p>
     <div class="hero-ctas">
-      <button class="btn btn-primary" on:click={() => scrollToSection('demo')}>View Live Demo</button>
+      <button class="btn btn-primary" id="tour-demo-btn" on:click={() => scrollToSection('demo')}>View Live Demo</button>
       <a href="/docs" class="btn btn-outline">Read Documentation</a>
     </div>
     <p class="hero-tagline">Built for the Vertex Swarm Challenge</p>
@@ -349,7 +372,7 @@
       </div>
     </div>
     <div class="demo-ctas">
-      <a href="/dashboard" class="btn btn-primary">Launch Dashboard</a>
+      <a href="/dashboard" class="btn btn-primary" id="tour-launch-btn">Launch Dashboard</a>
       <a href="https://github.com" class="btn btn-outline" target="_blank" rel="noopener">View on GitHub</a>
     </div>
   </div>
@@ -411,6 +434,19 @@
     </div>
   </div>
 </footer>
+
+{#if showTourButton}
+  <button class="tour-fab" on:click={handleTour} title="Take a guided tour">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <span>Tour</span>
+  </button>
+{/if}
+
+<TourStyles />
 
 <style>
   :global(html) {
@@ -1301,5 +1337,32 @@
       flex-direction: column;
       align-items: center;
     }
+  }
+
+  /* Tour FAB */
+  .tour-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: #ff6f00;
+    color: #0f0f11;
+    border: none;
+    border-radius: 50px;
+    font-family: 'Chakra Petch', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(255, 111, 0, 0.4);
+    transition: all 0.2s ease;
+  }
+  .tour-fab:hover {
+    background: #ff8f33;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(255, 111, 0, 0.5);
   }
 </style>

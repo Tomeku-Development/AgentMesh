@@ -5,7 +5,7 @@
 	import { avgLatency, throughputSamples } from '$lib/stores/metrics';
 </script>
 
-<div class="metrics-row">
+<div class="metrics-row" id="tour-metrics">
 	<div class="metric">
 		<span class="metric-value accent">{$activeAgentCount}</span>
 		<span class="metric-label">Active Agents</span>

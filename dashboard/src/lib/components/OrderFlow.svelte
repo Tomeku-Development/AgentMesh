@@ -16,7 +16,7 @@
 	}
 </script>
 
-<div class="flow-container">
+<div class="flow-container" id="tour-orders">
 	{#if orders.length === 0}
 		<div class="empty-state">
 			<span class="empty-icon">&#9671;</span>

@@ -39,7 +39,7 @@
 	}
 </script>
 
-<div class="log-container">
+<div class="log-container" id="tour-events">
 	{#each events.slice(0, 50) as event, i (event.timestamp + event.topic + i)}
 		{@const cat = topicCategory(event.topic)}
 		<div class="log-entry">

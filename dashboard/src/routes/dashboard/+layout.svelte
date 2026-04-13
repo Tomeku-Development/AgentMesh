@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { get } from 'svelte/store';
+	import { browser } from '$app/environment';
 	import { connected } from '$lib/stores/websocket';
 	import { activeAgentCount, totalAgents } from '$lib/stores/agents';
 	import { completedOrders } from '$lib/stores/orders';
@@ -11,6 +12,7 @@
 	import { activeWorkspace, activeWorkspaceId } from '$lib/stores/workspace';
 	import { getMe } from '$lib/api/auth';
 	import { getWorkspace } from '$lib/api/workspaces';
+	import TourStyles from '$lib/tour/TourStyles.svelte';
 
 	const tabs = [
 		{ label: 'DASHBOARD', href: '/dashboard/' },
@@ -25,6 +27,7 @@
 	$: pathname = String($page.url.pathname);
 
 	let authChecked = false;
+	let showTourBtn = false;
 
 	onMount(async () => {
 		const token = get(accessToken);
@@ -63,7 +66,22 @@
 		}
 
 		authChecked = true;
+
+		// Initialize dashboard tour
+		if (browser) {
+			const { shouldShowDashboardTour, startDashboardTour } = await import('$lib/tour/driver');
+			showTourBtn = true;
+			if (shouldShowDashboardTour()) {
+				setTimeout(() => startDashboardTour(), 2000);
+			}
+		}
 	});
+
+	async function handleDashboardTour() {
+		if (!browser) return;
+		const { startDashboardTour } = await import('$lib/tour/driver');
+		startDashboardTour();
+	}
 
 	function handleLogout() {
 		logout();
@@ -104,7 +122,7 @@
 {#if authChecked}
 	<div class="dashboard-shell">
 		<!-- Top bar with logo and workspace -->
-		<header class="top-bar">
+		<header class="top-bar" id="tour-header">
 			<div class="top-bar-left">
 				<a href="/" class="logo">
 					<div class="logo-icon">
@@ -121,11 +139,21 @@
 					<span class="nav-stat">{$completedOrders} Settled</span>
 					<span class="nav-stat">{$messageCount} Msgs</span>
 				</div>
-				<div class="connection-badge" class:online={$connected} class:offline={!$connected}>
+				<div class="connection-badge" id="tour-connection" class:online={$connected} class:offline={!$connected}>
 					<span class="connection-dot"></span>
 					{$connected ? 'LIVE' : 'OFFLINE'}
 				</div>
-				<div class="workspace-badge">{$activeWorkspace?.name ?? 'WORKSPACE'}</div>
+				<div class="workspace-badge" id="tour-workspace">{$activeWorkspace?.name ?? 'WORKSPACE'}</div>
+				{#if showTourBtn}
+					<button class="tour-btn" on:click={handleDashboardTour} title="Take a guided tour">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="12" cy="12" r="10"/>
+							<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+							<line x1="12" y1="17" x2="12.01" y2="17"/>
+						</svg>
+						Tour
+					</button>
+				{/if}
 				<div class="user-menu">
 					<span class="user-name">{$currentUser?.display_name ?? $currentUser?.email ?? ''}</span>
 					<button class="logout-btn" on:click={handleLogout}>LOGOUT</button>
@@ -134,7 +162,7 @@
 		</header>
 
 		<!-- Tab navigation -->
-		<nav class="tab-bar">
+		<nav class="tab-bar" id="tour-nav-tabs">
 			{#each tabs as tab}
 				<a
 					href={tab.href}
@@ -151,6 +179,8 @@
 			<slot />
 		</main>
 	</div>
+
+	<TourStyles />
 {:else}
 	<div class="loading-screen">
 		<div class="spinner"></div>
@@ -297,6 +327,26 @@
 	.logout-btn:hover {
 		color: var(--red);
 		border-color: var(--red);
+	}
+
+	.tour-btn {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 6px 14px;
+		background: rgba(255, 111, 0, 0.15);
+		color: #ff6f00;
+		border: 1px solid rgba(255, 111, 0, 0.3);
+		border-radius: 6px;
+		font-family: 'Chakra Petch', sans-serif;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+	.tour-btn:hover {
+		background: rgba(255, 111, 0, 0.25);
+		border-color: #ff6f00;
 	}
 
 	/* ── Loading screen ───────────────────────── */

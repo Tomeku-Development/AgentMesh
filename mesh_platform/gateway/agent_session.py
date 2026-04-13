@@ -1,4 +1,11 @@
-"""Per-connection agent session bridging WebSocket to MQTT."""
+"""Per-connection agent session bridging WebSocket to MQTT.
+
+NOTE: LLM usage tracking is handled via the LLMRouter.set_usage_callback()
+mechanism. When the platform initializes the LLM router (typically in the
+mesh agent initialization or platform bootstrap), it should set a callback
+that records usage via usage_service.record_llm_usage(). This keeps the
+gateway decoupled from LLM billing concerns.
+"""
 
 from __future__ import annotations
 

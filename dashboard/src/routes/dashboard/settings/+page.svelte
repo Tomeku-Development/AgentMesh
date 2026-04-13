@@ -307,6 +307,31 @@
 			{/if}
 		{/if}
 	</section>
+
+	<section class="capabilities-section">
+		<h2>Capabilities</h2>
+		<p class="subtitle">Manage agent capabilities and permissions</p>
+
+		<a href="/dashboard/settings/capabilities/" class="manage-link">
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+			</svg>
+			Manage Capabilities
+		</a>
+	</section>
+
+	<section class="configuration-section">
+		<h2>Configuration</h2>
+		<p class="subtitle">Customize LLM preferences, notification settings, and agent defaults</p>
+
+		<a href="/dashboard/settings/config/" class="manage-link">
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<circle cx="12" cy="12" r="3"/>
+				<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+			</svg>
+			Manage Configuration
+		</a>
+	</section>
 </div>
 
 <style>
@@ -338,6 +363,46 @@
 		color: var(--text-secondary);
 		font-size: 0.875rem;
 		margin-bottom: 24px;
+	}
+
+	/* Capabilities Section */
+	.capabilities-section {
+		margin-top: 32px;
+		padding-top: 32px;
+		border-top: 1px solid var(--border);
+	}
+
+	/* Configuration Section */
+	.configuration-section {
+		margin-top: 32px;
+		padding-top: 32px;
+		border-top: 1px solid var(--border);
+	}
+
+	.manage-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		background: var(--accent);
+		color: #fff;
+		border: none;
+		border-radius: 3px;
+		padding: 10px 20px;
+		font-family: var(--font-heading);
+		font-size: 0.8rem;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		cursor: pointer;
+		text-decoration: none;
+		transition: background 0.2s;
+	}
+
+	.manage-link:hover {
+		background: var(--accent-hover);
+	}
+
+	.manage-link svg {
+		flex-shrink: 0;
 	}
 
 	/* Generated Key Banner */

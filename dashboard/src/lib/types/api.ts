@@ -155,6 +155,89 @@ export interface APIKeyListResponse {
 }
 
 // ============================================
+// Capability Types
+// ============================================
+
+export interface Capability {
+  id: string;
+  name: string;
+  display_name: string;
+  category: string;
+  description: string;
+  applicable_roles: string;
+  is_system: boolean;
+  workspace_id: string | null;
+  created_at: string;
+}
+
+// ============================================
+// Billing Types
+// ============================================
+
+export interface UsageSummary {
+	total_calls: number;
+	total_input_tokens: number;
+	total_output_tokens: number;
+	total_cost: number;
+	total_credits_used: number;
+	credits_remaining: number;
+	credits_limit: number;
+	period_start: string;
+	period_end: string;
+	daily_breakdown: Array<{ date: string; calls: number; tokens: number; cost: number }>;
+	by_model: Array<{ model: string; calls: number; tokens: number; cost: number }>;
+	by_agent_role: Array<{ role: string; calls: number; tokens: number; cost: number }>;
+	by_prompt_type: Array<{ type: string; calls: number; cost: number }>;
+}
+
+export interface SubscriptionPlan {
+	id: string;
+	name: string;
+	display_name: string;
+	description: string;
+	monthly_price: number;
+	monthly_credits: number;
+	max_agents: number;
+	max_workspaces: number;
+	max_api_keys: number;
+	llm_requests_per_day: number;
+	llm_tokens_per_month: number;
+	features_json: Record<string, boolean | number>;
+	sort_order: number;
+	is_active: boolean;
+}
+
+export interface QuotaStatus {
+	allowed: boolean;
+	credits_used: number;
+	credits_limit: number;
+	credits_remaining: number;
+	daily_requests: number;
+	daily_limit: number;
+	plan: string;
+	reason: string;
+}
+
+export interface BillingEntry {
+	id: string;
+	type: string;
+	amount: number;
+	currency: string;
+	status: string;
+	description: string;
+	created_at: string;
+}
+
+export interface PlatformAnalytics {
+	total_workspaces: number;
+	today: { llm_calls: number; cost: number; tokens: number };
+	this_month: { llm_calls: number; cost: number };
+	top_workspaces: Array<{ workspace_id: string; calls: number; cost: number }>;
+	plan_distribution: Array<{ plan: string; count: number }>;
+	hourly_breakdown: Array<{ hour: number; calls: number }>;
+}
+
+// ============================================
 // Common Types
 // ============================================
 

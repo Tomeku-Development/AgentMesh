@@ -11,6 +11,8 @@ import mesh_platform.models.base as _base_mod
 from mesh_platform.gateway import connection_manager
 from mesh_platform.gateway.agent_session import AgentSession
 from mesh_platform.gateway.protocol import WSRegisterMessage, WSSystemMessage, parse_client_message
+from mesh.core.capability_utils import validate_capabilities
+from mesh_platform.services.capability_seed import CAPABILITY_SEEDS
 from mesh_platform.config import settings
 from mesh_platform.services.api_key_service import validate_api_key
 
@@ -80,6 +82,15 @@ async def agent_websocket(
         capabilities=msg.capabilities,
         transport_factory=_transport_factory,
     )
+
+    # Validate and log unknown capabilities
+    known_caps = {cap["name"] for cap in CAPABILITY_SEEDS}
+    _, unknown_caps = validate_capabilities(msg.capabilities, known_caps)
+    if unknown_caps:
+        logger.warning(
+            "Agent %s registered with unknown capabilities: %s",
+            session.agent_id, unknown_caps,
+        )
 
     connection_manager.connect(workspace.id, session.agent_id, session)
 

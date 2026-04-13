@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mesh_platform.config import settings
 from mesh_platform.models.base import async_session_factory
 from mesh_platform.models.user import User
+from mesh_platform.models.workspace import WorkspaceMembership, WorkspaceRole
 from mesh_platform.services import auth_service
 
 
@@ -66,3 +67,31 @@ async def get_workspace(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member")
     return ws
+
+
+async def require_workspace_admin(
+    workspace_id: Annotated[str, Path()],
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkspaceMembership:
+    """Require user to be admin or owner of the workspace."""
+    from mesh_platform.services.workspace_service import check_membership
+
+    membership = await check_membership(db, workspace_id, user.id)
+    if not membership or membership.role not in [WorkspaceRole.owner.value, WorkspaceRole.admin.value]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return membership
+
+
+async def require_workspace_owner(
+    workspace_id: Annotated[str, Path()],
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkspaceMembership:
+    """Require user to be owner of the workspace."""
+    from mesh_platform.services.workspace_service import check_membership
+
+    membership = await check_membership(db, workspace_id, user.id)
+    if not membership or membership.role != WorkspaceRole.owner.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
+    return membership

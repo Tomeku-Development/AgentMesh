@@ -9,6 +9,7 @@ import threading
 
 from mesh.agents.base import BaseAgent
 from mesh.core import topics
+from mesh.core.capability_utils import normalize_capability
 from mesh.core.messages import (
     MessageEnvelope,
     OrderCommit,
@@ -81,9 +82,12 @@ class SupplierAgent(BaseAgent):
         max_price = payload.get("max_price_per_unit", 0)
         required_caps = payload.get("required_capabilities", [])
 
-        # Check if we can fulfill
-        if category not in self.capabilities and not any(
-            c in self.capabilities for c in required_caps
+        # Check if we can fulfill (case-insensitive matching)
+        normalized_category = normalize_capability(category)
+        normalized_caps = {normalize_capability(c) for c in self.capabilities}
+        normalized_required = [normalize_capability(c) for c in required_caps]
+        if normalized_category not in normalized_caps and not any(
+            c in normalized_caps for c in normalized_required
         ):
             return
 

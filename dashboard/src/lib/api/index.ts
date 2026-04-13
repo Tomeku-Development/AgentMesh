@@ -13,26 +13,34 @@ export { getTransactions, getBalances } from './ledger';
 export * from './auth';
 export * from './workspaces';
 export * from './apikeys';
+export * from './capabilities';
+export * from './billing';
 
 // Re-export types for convenience
 export type {
-  Agent,
-  AgentListResponse,
-  AgentStatus,
-  Order,
-  OrderListResponse,
-  OrderEvent,
-  LedgerEntry,
-  LedgerListResponse,
-  Balance,
-  BalancesResponse,
-  ApiError,
-  PaginatedParams,
-  User,
-  TokenResponse,
-  Workspace,
-  WorkspaceListResponse,
-  APIKey,
-  APIKeyCreated,
-  APIKeyListResponse,
+	Agent,
+	AgentListResponse,
+	AgentStatus,
+	Order,
+	OrderListResponse,
+	OrderEvent,
+	LedgerEntry,
+	LedgerListResponse,
+	Balance,
+	BalancesResponse,
+	ApiError,
+	PaginatedParams,
+	User,
+	TokenResponse,
+	Workspace,
+	WorkspaceListResponse,
+	APIKey,
+	APIKeyCreated,
+	APIKeyListResponse,
+	Capability,
+	UsageSummary,
+	SubscriptionPlan,
+	QuotaStatus,
+	BillingEntry,
+	PlatformAnalytics
 } from '$lib/types/api';

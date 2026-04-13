@@ -17,6 +17,8 @@
 		{ label: 'AGENTS', href: '/dashboard/agents/' },
 		{ label: 'ORDERS', href: '/dashboard/orders/' },
 		{ label: 'LEDGER', href: '/dashboard/ledger/' },
+		{ label: 'BILLING', href: '/dashboard/billing/' },
+		{ label: 'ADMIN', href: '/dashboard/admin/' }, // TODO: conditionally show based on workspace role
 		{ label: 'SETTINGS', href: '/dashboard/settings/' }
 	];
 

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mesh_platform.models.base import Base
@@ -28,6 +28,9 @@ class Workspace(Base):
     plan: Mapped[str] = mapped_column(String(20), default="starter")
     max_agents: Mapped[int] = mapped_column(Integer, default=10)
     config_json: Mapped[str | None] = mapped_column(Text, default="{}")
+    credits_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    credits_used_this_month: Mapped[float] = mapped_column(Float, default=0.0)
+    billing_cycle_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped["User"] = relationship("User")  # noqa: F821

@@ -6,7 +6,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from .base import LLMProvider, LLMResponse
 
@@ -103,6 +103,7 @@ class LLMRouter:
         self._primary_stats = ProviderStats(name="primary")
         self._fallback_stats = ProviderStats(name="fallback")
         self._enabled = True
+        self._usage_callback: Callable[[LLMResponse], None] | None = None
 
         if config is not None:
             self._init_from_config(config)
@@ -225,6 +226,15 @@ class LLMRouter:
         self._fallback_stats = ProviderStats(name=fallback.name if fallback else "fallback")
         self._enabled = True
 
+    def set_usage_callback(self, callback: Callable[[LLMResponse], None]) -> None:
+        """Set callback invoked after each LLM call with response data.
+
+        Args:
+            callback: Function called with LLMResponse after each successful call.
+                      Used for usage tracking and billing integration.
+        """
+        self._usage_callback = callback
+
     async def complete(
         self,
         prompt: str,
@@ -261,6 +271,12 @@ class LLMRouter:
                 self._primary_stats.record_success(
                     response.latency_ms, response.cost_estimate
                 )
+                # Invoke usage callback for tracking
+                if self._usage_callback:
+                    try:
+                        self._usage_callback(response)
+                    except Exception as e:
+                        logger.warning("Usage callback failed: %s", e)
                 return response
             except Exception as e:
                 logger.warning(f"Primary provider failed: {e}")
@@ -285,6 +301,12 @@ class LLMRouter:
                 self._fallback_stats.record_success(
                     response.latency_ms, response.cost_estimate
                 )
+                # Invoke usage callback for tracking
+                if self._usage_callback:
+                    try:
+                        self._usage_callback(response)
+                    except Exception as e:
+                        logger.warning("Usage callback failed: %s", e)
                 return response
             except Exception as e:
                 logger.warning(f"Fallback provider failed: {e}")

@@ -2,8 +2,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { createAPIKey } from '$lib/api/apikeys';
 	import { getAgents } from '$lib/api/agents';
+	import { getCapabilities } from '$lib/api/capabilities';
 	import { activeWorkspaceId } from '$lib/stores/workspace';
-	import type { Agent } from '$lib/types/api';
+	import type { Agent, Capability } from '$lib/types/api';
 
 	// Wizard state
 	let currentStep = 1;
@@ -64,6 +65,38 @@
 	let capabilities = '';
 	let balance = 10000;
 
+	// Step 2: Capability picker
+	let availableCapabilities: Capability[] = [];
+	let selectedCapabilityNames: string[] = [];
+	let customCapabilityInput = '';
+	let capabilitiesLoading = false;
+	let capabilitiesError = '';
+	let capSearchQuery = '';
+	let capSelectedCategory = 'all';
+
+	const capCategories = ['domain', 'process', 'iot', 'logistics', 'quality', 'market'] as const;
+	const capCategoryColors: Record<string, string> = {
+		domain: '#ff6f00',
+		process: '#4ade80',
+		iot: '#60a5fa',
+		logistics: '#818cf8',
+		quality: '#c084fc',
+		market: '#fbbf24'
+	};
+
+	$: filteredCapabilities = availableCapabilities.filter(cap => {
+		const matchesSearch = capSearchQuery === '' ||
+			cap.name.toLowerCase().includes(capSearchQuery.toLowerCase()) ||
+			cap.display_name.toLowerCase().includes(capSearchQuery.toLowerCase());
+		const matchesCategory = capSelectedCategory === 'all' || cap.category === capSelectedCategory;
+		return matchesSearch && matchesCategory;
+	});
+
+	$: groupedCapabilities = capCategories.reduce((acc, cat) => {
+		acc[cat] = filteredCapabilities.filter(c => c.category === cat);
+		return acc;
+	}, {} as Record<string, Capability[]>);
+
 	// Step 3: API Key
 	let apiKeyOption: 'generate' | 'existing' = 'generate';
 	let generatedKey: string | null = null;
@@ -94,12 +127,24 @@
 
 	function selectRole(roleId: string) {
 		selectedRole = roleId;
-		capabilities = roleCapabilities[roleId] || '';
+		// Pre-select capabilities based on role's applicable_roles
+		const roleCapSet = new Set<string>();
+		availableCapabilities.forEach(cap => {
+			const capRoles = cap.applicable_roles ? cap.applicable_roles.split(',').map(r => r.trim()) : [];
+			if (capRoles.includes(roleId)) {
+				roleCapSet.add(cap.name);
+			}
+		});
+		selectedCapabilityNames = Array.from(roleCapSet);
+		customCapabilityInput = '';
 	}
 
 	function nextStep() {
 		if (currentStep < totalSteps) {
 			currentStep++;
+			if (currentStep === 2) {
+				loadCapabilitiesData();
+			}
 			if (currentStep === 5) {
 				startVerification();
 			}
@@ -125,8 +170,64 @@
 		activeTab = 'typescript';
 		verificationStatus = 'waiting';
 		foundAgent = null;
+		selectedCapabilityNames = [];
+		customCapabilityInput = '';
+		capSearchQuery = '';
+		capSelectedCategory = 'all';
 		stopPolling();
 	}
+
+	async function loadCapabilitiesData() {
+		if (availableCapabilities.length > 0) return; // Already loaded
+		capabilitiesLoading = true;
+		capabilitiesError = '';
+		try {
+			availableCapabilities = await getCapabilities();
+			// Pre-select based on role if role already selected
+			if (selectedRole) {
+				const roleCapSet = new Set<string>();
+				availableCapabilities.forEach(cap => {
+					const capRoles = cap.applicable_roles ? cap.applicable_roles.split(',').map(r => r.trim()) : [];
+					if (capRoles.includes(selectedRole as string)) {
+						roleCapSet.add(cap.name);
+					}
+				});
+				selectedCapabilityNames = Array.from(roleCapSet);
+			}
+		} catch (err) {
+			capabilitiesError = err instanceof Error ? err.message : 'Failed to load capabilities';
+			// Fallback to legacy defaults
+			if (selectedRole && roleCapabilities[selectedRole]) {
+				selectedCapabilityNames = roleCapabilities[selectedRole].split(',').map(c => c.trim());
+			}
+		} finally {
+			capabilitiesLoading = false;
+		}
+	}
+
+	function toggleCapability(capName: string) {
+		if (selectedCapabilityNames.includes(capName)) {
+			selectedCapabilityNames = selectedCapabilityNames.filter(c => c !== capName);
+		} else {
+			selectedCapabilityNames = [...selectedCapabilityNames, capName];
+		}
+	}
+
+	function addCustomCapability() {
+		const customCap = customCapabilityInput.trim();
+		if (customCap && !selectedCapabilityNames.includes(customCap)) {
+			selectedCapabilityNames = [...selectedCapabilityNames, customCap];
+			customCapabilityInput = '';
+		}
+	}
+
+	function parseApplicableRoles(roles: string): string[] {
+		if (!roles) return [];
+		return roles.split(',').map(r => r.trim()).filter(Boolean);
+	}
+
+	// Update capabilities string when selected capabilities change
+	$: capabilities = [...selectedCapabilityNames].join(', ');
 
 	async function generateKey() {
 		if (!selectedRole) return;
@@ -406,15 +507,131 @@ asyncio.run(connect_iot_agent())`;
 					/>
 				</div>
 
-				<div class="form-group">
-					<label for="capabilities">Capabilities</label>
-					<input
-						id="capabilities"
-						type="text"
-						bind:value={capabilities}
-						placeholder="comma-separated capabilities"
-					/>
-					<p class="field-hint">Pre-filled based on role. Separate with commas.</p>
+				<div class="form-group capabilities-section">
+					<label>Capabilities</label>
+					<p class="field-hint">Select capabilities for your {currentRole?.name || 'agent'} agent.</p>
+
+					{#if capabilitiesError}
+						<div class="cap-error">{capabilitiesError}</div>
+					{/if}
+
+					{#if capabilitiesLoading}
+						<div class="cap-loading">
+							<div class="spinner-small"></div>
+							Loading capabilities...
+						</div>
+					{:else}
+						<!-- Search and Filter -->
+						<div class="cap-filters">
+							<input
+								type="text"
+								class="cap-search"
+								placeholder="Search capabilities..."
+								bind:value={capSearchQuery}
+						/>
+							<div class="cap-category-tabs">
+								<button
+									class="cap-cat-btn"
+									class:active={capSelectedCategory === 'all'}
+									on:click={() => capSelectedCategory = 'all'}
+									type="button"
+								>
+									All
+								</button>
+								{#each capCategories as cat}
+									<button
+										class="cap-cat-btn"
+										class:active={capSelectedCategory === cat}
+										style="--cat-color: {capCategoryColors[cat]}"
+										on:click={() => capSelectedCategory = cat}
+										type="button"
+									>
+										{cat}
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Selected capabilities -->
+						{#if selectedCapabilityNames.length > 0}
+							<div class="selected-caps">
+								{#each selectedCapabilityNames as capName}
+									<span class="selected-cap-tag">
+										{capName}
+										<button
+											class="remove-cap"
+											on:click={() => toggleCapability(capName)}
+											type="button"
+										>
+												×
+											</button>
+										</span>
+								{/each}
+							</div>
+						{/if}
+
+						<!-- Capability list by category -->
+						<div class="cap-list">
+							{#each capCategories as cat}
+								{#if groupedCapabilities[cat] && groupedCapabilities[cat].length > 0}
+									<div class="cap-group">
+										<h4 class="cap-group-title" style="--cat-color: {capCategoryColors[cat]}">
+											{cat}
+										</h4>
+										<div class="cap-items">
+											{#each groupedCapabilities[cat] as cap}
+												<label class="cap-item" title={cap.description}>
+													<input
+														type="checkbox"
+														checked={selectedCapabilityNames.includes(cap.name)}
+														on:change={() => toggleCapability(cap.name)}
+													/>
+													<div class="cap-item-content">
+														<span class="cap-item-name">{cap.display_name}</span>
+														<span class="cap-item-desc">{cap.description || 'No description'}</span>
+														<div class="cap-item-roles">
+															{#each parseApplicableRoles(cap.applicable_roles) as role}
+																<span class="cap-role-tag">{role}</span>
+															{/each}
+														</div>
+													</div>
+												</label>
+											{/each}
+										</div>
+									</div>
+								{/if}
+							{/each}
+
+							{#if filteredCapabilities.length === 0}
+								<div class="cap-empty">
+									{#if capSearchQuery}
+										No capabilities match your search.
+									{:else}
+										No capabilities available.
+									{/if}
+								</div>
+							{/if}
+						</div>
+
+						<!-- Custom capability input -->
+						<div class="custom-cap-section">
+							<input
+								type="text"
+								class="custom-cap-input"
+								placeholder="Add custom capability..."
+								bind:value={customCapabilityInput}
+								on:keydown={(e) => e.key === 'Enter' && addCustomCapability()}
+						/>
+							<button
+								class="add-custom-btn"
+								on:click={addCustomCapability}
+								disabled={!customCapabilityInput.trim()}
+								type="button"
+							>
+								Add
+							</button>
+						</div>
+					{/if}
 				</div>
 
 				<div class="form-group">
@@ -1445,6 +1662,269 @@ asyncio.run(connect_iot_agent())`;
 
 	@keyframes spin {
 		to { transform: rotate(360deg); }
+	}
+
+	/* ── Capability Picker ───────────────────── */
+	.capabilities-section {
+		margin-bottom: 24px;
+	}
+
+	.cap-error {
+		background: rgba(239, 68, 68, 0.1);
+		border: 1px solid rgba(239, 68, 68, 0.2);
+		border-radius: 4px;
+		padding: 12px;
+		color: var(--red);
+		font-size: 0.875rem;
+		margin-bottom: 16px;
+	}
+
+	.cap-loading {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 24px;
+		color: var(--text-secondary);
+		font-size: 0.875rem;
+	}
+
+	.cap-filters {
+		display: flex;
+		gap: 12px;
+		margin-bottom: 16px;
+		flex-wrap: wrap;
+	}
+
+	.cap-search {
+		flex: 1;
+		min-width: 200px;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 10px 12px;
+		font-family: var(--font-body);
+		font-size: 0.875rem;
+		color: var(--text);
+	}
+
+	.cap-search:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+
+	.cap-category-tabs {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+
+	.cap-cat-btn {
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 3px;
+		padding: 6px 12px;
+		font-family: var(--font-heading);
+		font-size: 0.65rem;
+		font-weight: 500;
+		color: var(--text-secondary);
+		cursor: pointer;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		transition: all 0.2s;
+	}
+
+	.cap-cat-btn:hover {
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+
+	.cap-cat-btn.active {
+		background: color-mix(in srgb, var(--cat-color, var(--accent)) 15%, var(--bg-elevated));
+		border-color: var(--cat-color, var(--accent));
+		color: var(--cat-color, var(--accent));
+	}
+
+	.selected-caps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin-bottom: 16px;
+		padding: 12px;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+	}
+
+	.selected-cap-tag {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		background: var(--accent-dim);
+		color: var(--accent);
+		padding: 4px 10px;
+		border-radius: 3px;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+	}
+
+	.remove-cap {
+		background: transparent;
+		border: none;
+		color: var(--accent);
+		cursor: pointer;
+		font-size: 1rem;
+		line-height: 1;
+		padding: 0;
+		opacity: 0.7;
+		transition: opacity 0.2s;
+	}
+
+	.remove-cap:hover {
+		opacity: 1;
+	}
+
+	.cap-list {
+		max-height: 400px;
+		overflow-y: auto;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+	}
+
+	.cap-group {
+		padding: 12px 16px;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.cap-group:last-child {
+		border-bottom: none;
+	}
+
+	.cap-group-title {
+		font-family: var(--font-heading);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--cat-color);
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		margin: 0 0 12px 0;
+	}
+
+	.cap-items {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.cap-item {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		cursor: pointer;
+		padding: 8px;
+		border-radius: 4px;
+		transition: background 0.2s;
+	}
+
+	.cap-item:hover {
+		background: var(--bg-surface);
+	}
+
+	.cap-item input[type="checkbox"] {
+		margin-top: 2px;
+		width: 16px;
+		height: 16px;
+		accent-color: var(--accent);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.cap-item-content {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.cap-item-name {
+		font-family: var(--font-heading);
+		font-size: 0.875rem;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.cap-item-desc {
+		font-size: 0.75rem;
+		color: var(--text-secondary);
+		line-height: 1.4;
+	}
+
+	.cap-item-roles {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 4px;
+	}
+
+	.cap-role-tag {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		padding: 2px 6px;
+		border-radius: 2px;
+		background: var(--bg-surface);
+		color: var(--text-dim);
+	}
+
+	.cap-empty {
+		padding: 32px;
+		text-align: center;
+		color: var(--text-dim);
+		font-size: 0.875rem;
+	}
+
+	.custom-cap-section {
+		display: flex;
+		gap: 8px;
+		margin-top: 16px;
+		padding-top: 16px;
+		border-top: 1px solid var(--border);
+	}
+
+	.custom-cap-input {
+		flex: 1;
+		background: var(--bg-elevated);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 10px 12px;
+		font-family: var(--font-mono);
+		font-size: 0.875rem;
+		color: var(--text);
+	}
+
+	.custom-cap-input:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+
+	.add-custom-btn {
+		background: var(--accent);
+		color: #fff;
+		border: none;
+		border-radius: 4px;
+		padding: 10px 20px;
+		font-family: var(--font-heading);
+		font-size: 0.75rem;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+
+	.add-custom-btn:hover:not(:disabled) {
+		opacity: 0.9;
+	}
+
+	.add-custom-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	/* ── Responsive ──────────────────────────── */

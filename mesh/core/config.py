@@ -65,7 +65,9 @@ class MeshConfig(BaseSettings):
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     def get_capabilities(self) -> list[str]:
-        """Parse comma-separated capabilities into list."""
+        """Parse comma-separated capabilities into list, normalized."""
+        from mesh.core.capability_utils import normalize_capabilities
         if not self.capabilities:
             return []
-        return [c.strip() for c in self.capabilities.split(",") if c.strip()]
+        raw = [c.strip() for c in self.capabilities.split(",") if c.strip()]
+        return normalize_capabilities(raw)

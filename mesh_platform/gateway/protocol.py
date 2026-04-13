@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # ── Client → Server ──────────────────────────────────────────────────────
@@ -15,6 +15,15 @@ class WSRegisterMessage(BaseModel):
     capabilities: list[str] = []
     balance: float = 10000.0
     agent_id: str | None = None
+
+    @field_validator("capabilities", mode="before")
+    @classmethod
+    def _normalize_capabilities(cls, v: list[str]) -> list[str]:
+        """Normalize capabilities: lowercase, strip, replace spaces/hyphens with underscores."""
+        from mesh.core.capability_utils import normalize_capabilities
+        if isinstance(v, list):
+            return normalize_capabilities(v)
+        return []
 
 
 class WSSubscribeMessage(BaseModel):

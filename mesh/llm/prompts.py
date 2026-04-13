@@ -10,6 +10,28 @@ import json
 from typing import Any
 
 
+def format_capabilities_context(capabilities: list[dict[str, str]]) -> str:
+    """Format capability name+description pairs for injection into LLM prompts.
+
+    Args:
+        capabilities: List of {"name": str, "description": str} dicts
+
+    Returns:
+        Formatted string for prompt inclusion
+    """
+    if not capabilities:
+        return "No specific capabilities declared."
+    lines = []
+    for cap in capabilities:
+        name = cap.get("name", "unknown")
+        desc = cap.get("description", "")
+        if desc:
+            lines.append(f"- **{name}**: {desc}")
+        else:
+            lines.append(f"- **{name}**")
+    return "\n".join(lines)
+
+
 def oracle_pricing_prompt(
     base_prices: dict[str, float],
     price_history: list[dict[str, Any]],
@@ -114,6 +136,7 @@ def supplier_bid_prompt(
     quantity_requested: int,
     max_price: float,
     reputation: float,
+    agent_capabilities: list[dict[str, str]] | None = None,
 ) -> tuple[str, str]:
     """Generate prompt for Supplier agent to create a bid.
 
@@ -126,6 +149,7 @@ def supplier_bid_prompt(
         quantity_requested: Quantity requested by buyer
         max_price: Maximum price buyer is willing to pay
         reputation: Supplier's reputation score (0.0-1.0)
+        agent_capabilities: Optional list of supplier's capabilities
 
     Returns:
         (system_prompt, user_prompt) tuple
@@ -146,9 +170,18 @@ Constraints:
 - bid_price must be between cost (minimum to break even) and max_price
 - Higher reputation allows for premium pricing
 - Consider inventory and active orders when setting max_quantity
-- Be competitive but profitable"""
+- Be competitive but profitable
+- Leverage your specialized capabilities when bidding — expertise in
+  relevant areas justifies premium pricing
+- If you lack capabilities matching the requested goods, acknowledge
+  this limitation in your reasoning"""
 
     profit_margin = market_price - cost
+    capabilities_section = f"""
+## Your Specialized Capabilities
+{format_capabilities_context(agent_capabilities or [])}
+"""
+
     user_prompt = f"""Create a bid for supplying goods.
 
 ## Request Details
@@ -168,7 +201,7 @@ Constraints:
 - Your bid price must be at least {cost:.2f} (your cost) to avoid losses
 - Your bid price should not exceed {max_price:.2f} (buyer's max)
 - Consider your capacity (inventory - active orders) for quantity
-
+{capabilities_section}
 Respond with your bid as JSON."""
 
     return system_prompt, user_prompt
@@ -241,6 +274,7 @@ def buyer_evaluate_bids_prompt(
     market_price: float,
     max_price: float,
     quality_threshold: float,
+    bidder_capabilities: dict[str, list[dict[str, str]]] | None = None,
 ) -> tuple[str, str]:
     """Generate prompt for Buyer agent to evaluate supplier bids.
 
@@ -249,6 +283,7 @@ def buyer_evaluate_bids_prompt(
         market_price: Current market price for reference
         max_price: Maximum price the buyer is willing to pay
         quality_threshold: Minimum quality score required
+        bidder_capabilities: Optional dict mapping supplier_id to their capabilities
 
     Returns:
         (system_prompt, user_prompt) tuple
@@ -272,13 +307,28 @@ Constraints:
 - Never select a bid with quality below the threshold
 - Consider supplier reputation and delivery estimates
 - Price should be at or below max_price
-- You may identify negotiation targets for higher-priced quality bids"""
+- You may identify negotiation targets for higher-priced quality bids
+- Weight supplier capabilities matching the requested goods — specialists
+  with relevant domain expertise are more reliable
+- Consider IoT and quality capabilities as indicators of verifiable
+  delivery quality"""
+
+    caps_section = ""
+    if bidder_capabilities:
+        caps_lines = []
+        for supplier_id, caps in bidder_capabilities.items():
+            caps_lines.append(f"### {supplier_id}")
+            caps_lines.append(format_capabilities_context(caps))
+        caps_section = f"""
+## Bidder Capabilities
+{chr(10).join(caps_lines)}
+"""
 
     user_prompt = f"""Evaluate the following supplier bids and select the best option.
 
 ## Bid Summary
 {json.dumps(bids, indent=2)}
-
+{caps_section}
 ## Evaluation Criteria
 - Market price reference: {market_price:.2f}
 - Your maximum acceptable price: {max_price:.2f}
@@ -431,6 +481,7 @@ def inspector_quality_prompt(
     quantity: int,
     supplier_reputation: float,
     category: str,
+    inspector_capabilities: list[dict[str, str]] | None = None,
 ) -> tuple[str, str]:
     """Generate prompt for Inspector agent to assess quality.
 
@@ -439,6 +490,7 @@ def inspector_quality_prompt(
         quantity: Quantity to inspect
         supplier_reputation: Supplier's reputation score
         category: Category of goods (e.g., "electronics", "textiles")
+        inspector_capabilities: Optional list of inspector's capabilities
 
     Returns:
         (system_prompt, user_prompt) tuple
@@ -461,7 +513,20 @@ Constraints:
 - Quality score must be between 0.0 and 1.0
 - Higher reputation suppliers typically deliver better quality, but inspect fairly
 - Provide specific findings to justify your score
-- Recommendation should align with quality score"""
+- Recommendation should align with quality score
+- Use your specialized inspection capabilities to determine the most
+  appropriate inspection method
+- If you have IoT sensors (temperature, RFID, pressure, etc.), incorporate
+  sensor-based data in your assessment
+- Reference your specific capabilities in your findings to justify the
+  inspection methodology"""
+
+    capabilities_section = f"""
+## Your Inspection Capabilities
+{format_capabilities_context(inspector_capabilities or [])}
+
+Use these capabilities to determine the most appropriate inspection methodology for this delivery.
+"""
 
     user_prompt = f"""Inspect a delivery of goods.
 
@@ -478,7 +543,7 @@ Constraints:
 - Document any defects or quality issues
 - Consider category-specific quality standards
 - Provide objective assessment regardless of supplier reputation
-
+{capabilities_section}
 Respond with your inspection report as JSON."""
 
     return system_prompt, user_prompt
@@ -625,6 +690,7 @@ def healing_analysis_prompt(
     active_orders: int,
     mesh_state: dict[str, Any],
     failure_history: list[dict[str, Any]],
+    candidate_capabilities: list[dict[str, Any]] | None = None,
 ) -> tuple[str, str]:
     """Generate prompt for self-healing analysis.
 
@@ -633,6 +699,7 @@ def healing_analysis_prompt(
         active_orders: Number of active orders
         mesh_state: Current state of the mesh network
         failure_history: Recent failure events
+        candidate_capabilities: Optional list of candidate agents with their capabilities
 
     Returns:
         (system_prompt, user_prompt) tuple
@@ -661,7 +728,26 @@ Constraints:
 - Prioritize completing active orders
 - Consider network stability when redistributing work
 - Balance quick recovery with thorough diagnosis
-- Suggest preventive measures when patterns emerge"""
+- Suggest preventive measures when patterns emerge
+- When recommending replacement agents, match their declared capabilities
+  to the failed agent's workload
+- Agents with more relevant capability overlap should be preferred for
+  redistribution
+- Consider capability descriptions to understand the depth of each
+  agent's expertise"""
+
+    candidates_section = ""
+    if candidate_capabilities:
+        cand_lines = []
+        for cand in candidate_capabilities:
+            agent_id = cand.get('agent_id', 'unknown')
+            role = cand.get('role', 'unknown')
+            cand_lines.append(f"### Agent: {agent_id} (Role: {role})")
+            cand_lines.append(format_capabilities_context(cand.get('capabilities', [])))
+        candidates_section = f"""
+## Available Replacement Candidates
+{chr(10).join(cand_lines)}
+"""
 
     user_prompt = f"""Analyze a potential failure situation in the mesh network.
 
@@ -674,7 +760,7 @@ Constraints:
 
 ## Recent Failure History
 {json.dumps(failure_history[-10:] if failure_history else [], indent=2, default=str)}
-
+{candidates_section}
 ## Analysis Tasks
 1. Identify root cause or pattern in failures
 2. Assess severity and impact on active orders

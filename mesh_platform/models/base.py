@@ -7,7 +7,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from mesh_platform.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False, future=True)
+engine = create_async_engine(settings.async_database_url, echo=False, future=True)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

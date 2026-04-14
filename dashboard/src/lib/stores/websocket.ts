@@ -1,5 +1,6 @@
 /** WebSocket connection manager */
 
+import { browser } from '$app/environment';
 import { writable, type Writable } from 'svelte/store';
 
 export interface MeshEvent {
@@ -20,7 +21,14 @@ const MAX_EVENTS = 200;
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function connect(url: string = 'ws://localhost:8080') {
+function getDefaultWsUrl(): string {
+	if (!browser) return '';
+	const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+	return `${wsProtocol}//${window.location.host}/ws/v1`;
+}
+
+export function connect(url?: string) {
+	const wsUrl = url || import.meta.env.VITE_WS_URL || getDefaultWsUrl();
 	if (ws) {
 		ws.close();
 	}

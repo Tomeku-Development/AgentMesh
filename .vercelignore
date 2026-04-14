@@ -1,0 +1,22 @@
+# Docker
+Dockerfile.*
+docker-compose*.yml
+foxmq/
+
+# Tests
+tests/
+platform_tests/
+*.test.ts
+
+# Development
+.github/
+docs/
+pitch-deck/
+scripts/
+fern/
+bridge/
+mesh/
+*.md
+.env*
+Makefile
+mesh-animation.html

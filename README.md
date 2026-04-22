@@ -8,7 +8,7 @@
 [![Docs](https://img.shields.io/badge/docs-agentmesh.world-blue?style=for-the-badge)](https://docs.agentmesh.world)
 [![npm](https://img.shields.io/npm/v/@agentmeshworld/sdk?style=for-the-badge&color=cb3837&logo=npm)](https://www.npmjs.com/package/@agentmeshworld/sdk)
 
-**5 autonomous agent roles · BFT consensus · LLM-powered decisions · Self-healing · Multi-tenant SaaS**
+**5 autonomous agent roles · BFT consensus · LLM-powered decisions · Self-healing · Enterprise SaaS**
 
 [Live Demo](https://agentmesh.world) · [API Docs](https://docs.agentmesh.world) · [TypeScript SDK](https://www.npmjs.com/package/@agentmeshworld/sdk) · [Dashboard](https://agentmesh.world/dashboard)
 
@@ -18,7 +18,7 @@
 
 MESH is a fully decentralized multi-agent system where autonomous agents negotiate, trade, ship, inspect, and settle supply chain orders — all without a central orchestrator. Agents coordinate exclusively through BFT-ordered MQTT messages on **Tashi Vertex / FoxMQ**, achieving consensus via Hashgraph gossip with sub-100ms latency.
 
-Every agent makes intelligent decisions powered by **LLM providers** (Amazon Bedrock + OpenRouter) with automatic fallback to deterministic heuristics. The entire system is wrapped in a **production-grade SaaS platform** with multi-tenant workspaces, dual payment providers, a TypeScript SDK, and a real-time dashboard.
+Every agent makes intelligent decisions powered by **LLM providers** (Amazon Bedrock + OpenRouter) with automatic fallback to deterministic heuristics. The system ships as a **production-grade SaaS platform** with multi-tenant workspaces, six granular RBAC roles, agent performance analytics, custom scenario builder, SLA monitoring, webhook integrations, an agent marketplace, dual payment providers, a TypeScript SDK, and a real-time dashboard.
 
 ```
                          FoxMQ BFT Cluster (4 nodes)
@@ -33,8 +33,8 @@ Every agent makes intelligent decisions powered by **LLM providers** (Amazon Bed
                                 |
     ┌───────────────────────────┴───────────────────────────┐
     │              MESH SaaS Platform (FastAPI)              │
-    │  Auth · Workspaces · Billing · API Keys · WebSocket   │
-    │  Xendit (fiat) + Cryptomus (crypto) · Event Sink      │
+    │  Auth · RBAC · Analytics · Scenarios · SLA · Webhooks │
+    │  Marketplace · Billing · API Keys · Event Sink        │
     └───────────────────────────────────────────────────────┘
                                 |
               ┌─────────────────┼─────────────────┐
@@ -51,10 +51,10 @@ Every agent makes intelligent decisions powered by **LLM providers** (Amazon Bed
 | Swarm intelligence | LLM-powered decisions (Bedrock + OpenRouter) with circuit-breaker fallback to heuristics |
 | Economic model | MESH_CREDIT currency, escrow, settlement splits, 3% deflationary burn |
 | Resilience | Heartbeat failure detection, quorum confirmation, role redistribution, LLM-optimized recovery |
-| Production SaaS | Multi-tenant workspaces, JWT auth, API keys, dual payment providers, usage-based billing |
+| Enterprise SaaS | Multi-tenant workspaces, 6-role RBAC, analytics, SLA monitoring, webhooks, agent marketplace |
 | Developer experience | Published TypeScript SDK + CLI, OpenAPI spec, AsyncAPI spec, Fern-generated docs |
 | Vertex integration | 4-node FoxMQ cluster, BFT ordering guarantees deterministic state convergence |
-| Testing | 152 tests (unit + integration + chaos) — all passing in ~0.10s |
+| Testing | 292+ tests (unit + integration + chaos + platform + property-based) — all passing |
 | Live demo | 3-minute scenario with supplier crash + self-healing recovery |
 
 
@@ -86,8 +86,8 @@ Every agent makes intelligent decisions powered by **LLM providers** (Amazon Bed
 │              Hashgraph Gossip · MQTT 5.0 · Sub-100ms             │
 ├─────────────────────────────────────────────────────────────────┤
 │                   SaaS Platform (FastAPI)                         │
-│  Auth · Workspaces · Orders · Ledger · Agents · Payments         │
-│  API Keys · Capabilities · Admin · MQTT Event Sink               │
+│  Auth · RBAC (6 roles) · Analytics · Scenarios · SLA Monitoring  │
+│  Webhooks · Agent Marketplace · Payments · Event Sink            │
 │  PostgreSQL · Xendit · Cryptomus · Tenant Isolation               │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -172,21 +172,81 @@ Four pluggable strategies compute counter-offer prices:
 
 ## SaaS Platform
 
-MESH ships with a full **enterprise SaaS control plane** built on FastAPI + PostgreSQL, turning the decentralized agent framework into a managed service.
+MESH ships with a full **enterprise SaaS control plane** built on FastAPI + PostgreSQL, turning the decentralized agent framework into a managed service with comprehensive operational tooling.
 
 ### Platform API (`/api/v1`)
 
 | Endpoint Group | Capabilities |
 |----------------|-------------|
 | **Auth** | Registration, login, JWT access/refresh tokens |
-| **Workspaces** | Multi-tenant workspace CRUD, slug-based isolation, role-based membership (owner/admin/viewer) |
+| **Workspaces** | Multi-tenant CRUD, slug-based isolation, role assignment with escalation prevention |
+| **RBAC** | 6 granular roles (owner, admin, operator, developer, auditor, viewer) with hierarchical permissions |
+| **Analytics** | Per-agent performance metrics, order lifecycle timelines, economic health aggregations |
+| **Scenarios** | Custom supply chain scenario builder with validation, built-in system scenarios |
+| **SLA Monitoring** | Rule-based threshold monitoring, breach detection, alert management with acknowledgment |
+| **Webhooks** | Outbound event notifications with HMAC-SHA256 signing, retry logic, delivery tracking |
+| **Marketplace** | Agent template registry, search/filter, instantiation with parameter overrides |
 | **Orders** | Order management with event sourcing, status tracking, bid counts |
 | **Ledger** | Transaction queries, balance lookups, settlement history |
 | **Agents** | Agent management, status monitoring, capability tracking |
 | **Payments** | Xendit (fiat: IDR, PHP, THB, VND, MYR) + Cryptomus (crypto: BTC, ETH, USDT, SOL, 150+ tokens) |
 | **API Keys** | Key generation with `amk_` prefix, scoped permissions, revocation |
-| **Capabilities** | Capability catalog, workspace-specific capability management |
 | **Admin** | Platform analytics, usage summaries, quota checks, CSV export, plan management |
+
+### Enhanced RBAC (6 Roles)
+
+| Role | Level | Access Scope |
+|------|-------|-------------|
+| **Owner** | 6 | Full access, ownership transfer, role assignment |
+| **Admin** | 5 | Everything except ownership transfer |
+| **Operator** | 4 | Agent management, scenario execution, order operations |
+| **Developer** | 3 | API keys, SDK endpoints, integration management |
+| **Auditor** | 2 | Analytics, audit logs, webhook delivery history (read-only) |
+| **Viewer** | 1 | Read-only access to workspace data |
+
+Role assignment includes escalation prevention — users cannot assign roles at or above their own level.
+
+### Agent Performance Analytics
+
+Three analytics endpoints aggregate data from existing event-sourced tables:
+
+- **Agent Metrics** — per-agent order counts, success rates, average settlement times, reputation scores
+- **Order Timeline** — phase transition durations for each order through the protocol lifecycle
+- **Economic Health** — total ledger volume, average transaction size, escrow utilization, burn amounts
+
+All accept a configurable time range (1-365 days) and return zero-valued metrics when no data exists.
+
+### Custom Scenario Builder
+
+Define and manage supply chain simulations with configurable:
+- Agent role configurations (role, count, initial balance, capabilities)
+- Goods catalogs (name, category, base price, volatility)
+- Order timelines (scheduled order placement)
+- Chaos events (agent kills, network partitions)
+
+Validation enforces at least one buyer, one supplier, and one goods definition. Built-in system scenarios are auto-discovered from the framework.
+
+### SLA Monitoring & Alerts
+
+Define performance thresholds and get alerted on breaches:
+- **Metric types**: order settlement time, agent uptime, order success rate
+- **Operators**: greater_than, less_than (strict comparison)
+- **On-demand evaluation** triggers metric computation and creates alerts for breaches
+- **Alert management** with acknowledgment tracking (user ID + timestamp)
+
+### Webhook & Integration Layer
+
+- **Outbound webhooks** with HTTPS URL validation and HMAC-SHA256 signed payloads
+- **Retry logic** — up to 3 attempts with exponential backoff (10s, 30s, 90s)
+- **Delivery tracking** — full history with HTTP status codes and response bodies
+- **Inbound triggers** — external systems can create orders via POST
+
+### Agent Marketplace
+
+- **Register** reusable agent templates with role, capabilities, config, and defaults
+- **Search** by text query, role filter, or capability filter — ordered by popularity
+- **Instantiate** templates into workspaces with parameter overrides
+- **Usage tracking** — templates track instantiation count
 
 ### Multi-Tenant Architecture
 
@@ -202,7 +262,6 @@ SDK Agent → WebSocket Gateway → TenantTransport → mesh/{slug}/orders/...
 - **TenantTransport** — automatically prefixes all MQTT topics with the workspace slug
 - **Event sink** — subscribes to `mesh/*` and persists events to PostgreSQL with idempotent processing
 - **Usage-based billing** — LLM token tracking, cost estimation, credit deduction per workspace
-- **Subscription plans** — configurable plans with monthly credit allocation and agent limits
 
 ### Payment Providers
 
@@ -210,8 +269,6 @@ SDK Agent → WebSocket Gateway → TenantTransport → mesh/{slug}/orders/...
 |----------|------|-----------|-------------|
 | **Xendit** | Fiat | IDR, PHP, THB, VND, MYR | Invoice creation, HMAC-SHA256 webhook verification |
 | **Cryptomus** | Crypto | BTC, ETH, USDT, SOL, 150+ tokens | Payment request, webhook verification |
-
-Both providers follow a common `PaymentProvider` interface with `create_payment`, `verify_webhook`, and `parse_webhook` methods.
 
 
 ## TypeScript SDK & CLI
@@ -265,8 +322,6 @@ The SDK provides:
 Currency: **MESH_CREDIT** (fiat-like, initialized per agent)
 
 ### Settlement Distribution
-
-On successful order completion, escrowed funds are distributed:
 
 | Recipient | Share | Purpose |
 |-----------|-------|---------|
@@ -336,12 +391,7 @@ The SvelteKit dashboard provides live visualization of the entire mesh network:
 | **EventLog** | Scrolling log of all MQTT messages with timestamps |
 | **ChaosControls** | Buttons to trigger agent kills/restarts during demo |
 
-Additional dashboard features:
-- **Guided tour** — driver.js-powered walkthrough for new users
-- **Demo engine** — built-in mock data generation for offline demos
-- **D3 visualization** — force-directed network topology graphs
-- **Multi-workspace** — workspace switching, settings, billing management
-- **Auth flow** — registration, login, token refresh
+Additional features: guided tour (driver.js), demo engine with mock data, D3 force-directed topology graphs, multi-workspace switching, auth flow.
 
 
 ## Quick Start
@@ -365,14 +415,18 @@ cd dashboard && npm install
 npm install @agentmeshworld/sdk
 ```
 
-### Run Tests (152 passing)
+### Run Tests
 
 ```bash
+# Agent framework tests (152 tests)
 make test-unit     # 100 unit tests — core + negotiation + reputation
 make test-int      # 31 integration tests — discovery, order lifecycle, settlement
 make test-chaos    # 21 chaos tests — self-healing, failure recovery
 
-# Or all at once
+# Platform tests (140 tests, including property-based)
+cd mesh && python -m pytest ../platform_tests/ -v
+
+# All agent tests at once
 python -m pytest tests/ -v
 ```
 
@@ -432,11 +486,8 @@ Includes:
 - **Architecture docs** — System overview, agent roles, economic model, security, self-healing
 
 ```bash
-# Validate API spec
-80  pnpm fern:check
-
-# Publish docs
-pnpm fern:publish
+pnpm fern:check     # Validate API spec
+pnpm fern:publish   # Publish docs
 ```
 
 
@@ -453,9 +504,12 @@ pnpm fern:publish
 | Per-capability reputation | Sybil attacks (costly to build rep) |
 | Quorum-based failure detection | False positive kills |
 | JWT + bcrypt auth | Platform API access |
+| 6-role RBAC with escalation prevention | Privilege escalation |
 | Scoped API keys | SDK/CLI access control |
 | Tenant-prefixed MQTT topics | Cross-workspace data leakage |
-| Webhook signature verification | Payment webhook spoofing |
+| Webhook HMAC-SHA256 signatures | Webhook spoofing |
+| HTTPS-only webhook URLs | Man-in-the-middle attacks |
+
 
 ## Project Structure
 
@@ -467,27 +521,72 @@ Project-Vertex/
 │   ├── agents/                  BaseAgent ABC + 5 role implementations
 │   ├── negotiation/             Multi-round engine, 4 strategies, dispute arbiter
 │   ├── healing/                 Failure detection, role redistribution, recovery
-│   ├── llm/                     LLM router, Bedrock + OpenRouter providers, 11 prompt templates
+│   ├── llm/                     LLM router, Bedrock + OpenRouter providers, 11 prompts
 │   ├── scenarios/               Demo scenarios
 │   └── cli.py                   CLI entry point
 ├── mesh_platform/               SaaS platform (FastAPI + PostgreSQL)
-│   ├── routers/                 9 API route groups (auth, workspaces, orders, ...)
-│   ├── models/                  11 SQLAlchemy ORM models
+│   ├── routers/                 14 API route groups
+│   │   ├── auth.py              Registration, login, JWT
+│   │   ├── workspaces.py        Workspace CRUD + role assignment
+│   │   ├── analytics.py         Agent metrics, order timeline, economic health
+│   │   ├── scenarios.py         Custom scenario builder CRUD
+│   │   ├── sla.py               SLA rules, evaluation, alerts
+│   │   ├── webhooks.py          Webhook registration, delivery, inbound triggers
+│   │   ├── marketplace.py       Agent template registry + instantiation
+│   │   ├── orders.py            Order management
+│   │   ├── ledger.py            Ledger queries
+│   │   ├── agents.py            Agent management
+│   │   ├── payments.py          Xendit + Cryptomus billing
+│   │   ├── api_keys.py          API key management
+│   │   ├── capabilities.py      Capability catalog
+│   │   └── admin.py             Admin endpoints
+│   ├── models/                  17 SQLAlchemy ORM models
 │   ├── schemas/                 Pydantic request/response schemas
-│   ├── services/                Business logic layer
-│   ├── gateway/                 WebSocket gateway (agent sessions, connection manager)
+│   ├── services/                Business logic layer (8 services)
+│   ├── gateway/                 WebSocket gateway
 │   ├── sink/                    MQTT event subscriber → PostgreSQL
-│   └── payments/                Xendit + Cryptomus provider integrations
+│   └── payments/                Payment provider integrations
 ├── bridge/                      MQTT → WebSocket bridge for dashboard
-├── dashboard/                   SvelteKit real-time UI (D3 viz, guided tour, chaos controls)
+├── dashboard/                   SvelteKit real-time UI
 ├── packages/sdk/                @agentmeshworld/sdk — TypeScript SDK + CLI
 ├── fern/                        API docs (OpenAPI, AsyncAPI, tutorials)
-├── tests/                       152 tests (unit + integration + chaos)
-├── platform_tests/              Platform API tests (async SQLite)
-├── docker-compose.yml           Core stack (FoxMQ cluster + agents + bridge + dashboard)
-├── docker-compose.saas.yml      SaaS overlay (+ PostgreSQL + API + event sink)
+├── tests/                       152 agent framework tests
+├── platform_tests/              140 platform tests (unit + property-based)
+├── docker-compose.yml           Core stack
+├── docker-compose.saas.yml      SaaS overlay
 └── Makefile                     Build/test/deploy commands
 ```
+
+
+## Testing
+
+| Suite | Count | Focus |
+|-------|-------|-------|
+| Unit | 100 | Core components (crypto, identity, ledger, messages, negotiation, reputation, state) |
+| Integration | 31 | Cross-component workflows (discovery, order lifecycle, settlement) |
+| Chaos | 21 | Failure injection, recovery, redistribution |
+| Platform Unit | 87 | Auth, workspaces, payments, API keys, gateway, event sink, scenarios, marketplace, SLA |
+| Platform PBT | 53 | Property-based tests (Hypothesis) — 11 correctness properties, 100+ iterations each |
+| **Total** | **292+** | **All passing** |
+
+### Correctness Properties (Property-Based Testing)
+
+All platform features are validated with formal correctness properties using Hypothesis:
+
+| # | Property | What It Validates |
+|---|----------|-------------------|
+| 1 | Analytics aggregation correctness | Per-agent order counts, ledger volume, avg transaction size |
+| 2 | Order lifecycle duration computation | Phase transition durations sum to total order time |
+| 3 | Webhook HTTPS URL validation | Only `https://` URLs accepted |
+| 4 | Scenario serialization round-trip | JSON serialize → deserialize produces equal objects |
+| 5 | Scenario validation rejects invalid | Missing buyer/supplier/goods, invalid prices rejected |
+| 6 | SLA breach detection correctness | Breach iff (gt AND actual > threshold) OR (lt AND actual < threshold) |
+| 7 | RBAC permission check | Role-in-permitted-set for all 4 permission levels |
+| 8 | Role escalation prevention | Self-assignment to higher role always rejected |
+| 9 | Marketplace search filtering/ordering | Results match filters, ordered by usage count DESC |
+| 10 | Template instantiation merge | Overrides applied, defaults preserved for non-overridden fields |
+| 11 | Template name validation | Accepted iff 3-100 chars, duplicates rejected |
+
 
 ## Configuration
 
@@ -498,13 +597,12 @@ Project-Vertex/
 | `MESH_BROKER_HOST` | `127.0.0.1` | FoxMQ broker hostname |
 | `MESH_BROKER_PORT` | `1883` | MQTT port |
 | `MESH_AGENT_ROLE` | `buyer` | Agent role |
-| `MESH_AGENT_ID` | `auto` | Agent ID (auto = derive from Ed25519 pubkey) |
 | `MESH_CAPABILITIES` | `` | Comma-separated capabilities |
 | `MESH_INITIAL_BALANCE` | `10000` | Starting MESH_CREDIT balance |
 | `MESH_HEARTBEAT_INTERVAL` | `5.0` | Seconds between heartbeats |
 | `MESH_NEGOTIATE_MAX_ROUNDS` | `3` | Max counter-offer rounds |
 | `MESH_LLM_ENABLED` | `true` | Enable/disable LLM for agent decisions |
-| `MESH_LLM_PRIMARY_PROVIDER` | `bedrock` | Primary LLM provider (`bedrock` / `openrouter`) |
+| `MESH_LLM_PRIMARY_PROVIDER` | `bedrock` | Primary LLM provider |
 | `MESH_LLM_FALLBACK_PROVIDER` | `openrouter` | Fallback LLM provider |
 
 ### Platform Configuration (prefix `PLATFORM_`)
@@ -520,17 +618,6 @@ Project-Vertex/
 
 See `.env.example` for the full list.
 
-## Testing
-
-| Suite | Count | Focus |
-|-------|-------|-------|
-| Unit | 100 | Individual components in isolation (crypto, identity, ledger, messages, negotiation, reputation, state) |
-| Integration | 31 | Cross-component workflows (discovery, order lifecycle, settlement) |
-| Chaos | 21 | Failure injection, recovery, redistribution |
-| Platform | 6+ | Auth, workspaces, payments, API keys, gateway, event sink (async SQLite) |
-| **Total** | **152+** | **All passing in ~0.10s** |
-
-Tests run without a live MQTT broker — all agent logic is tested in-memory. Platform tests use async SQLite with httpx ASGI transport.
 
 ## Team
 

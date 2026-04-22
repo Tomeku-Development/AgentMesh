@@ -83,6 +83,66 @@ async def require_workspace_admin(
     return membership
 
 
+async def require_workspace_operator(
+    workspace_id: Annotated[str, Path()],
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkspaceMembership:
+    """Require user to be operator, admin, or owner of the workspace."""
+    from mesh_platform.services.workspace_service import check_membership
+
+    membership = await check_membership(db, workspace_id, user.id)
+    if not membership or membership.role not in [
+        WorkspaceRole.owner.value,
+        WorkspaceRole.admin.value,
+        WorkspaceRole.operator.value,
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Operator access required"
+        )
+    return membership
+
+
+async def require_workspace_auditor(
+    workspace_id: Annotated[str, Path()],
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkspaceMembership:
+    """Require user to be auditor, admin, or owner of the workspace."""
+    from mesh_platform.services.workspace_service import check_membership
+
+    membership = await check_membership(db, workspace_id, user.id)
+    if not membership or membership.role not in [
+        WorkspaceRole.owner.value,
+        WorkspaceRole.admin.value,
+        WorkspaceRole.auditor.value,
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Auditor access required"
+        )
+    return membership
+
+
+async def require_workspace_developer(
+    workspace_id: Annotated[str, Path()],
+    user: CurrentUser,
+    db: DBSession,
+) -> WorkspaceMembership:
+    """Require user to be developer, admin, or owner of the workspace."""
+    from mesh_platform.services.workspace_service import check_membership
+
+    membership = await check_membership(db, workspace_id, user.id)
+    if not membership or membership.role not in [
+        WorkspaceRole.owner.value,
+        WorkspaceRole.admin.value,
+        WorkspaceRole.developer.value,
+    ]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Developer access required"
+        )
+    return membership
+
+
 async def require_workspace_owner(
     workspace_id: Annotated[str, Path()],
     user: CurrentUser,

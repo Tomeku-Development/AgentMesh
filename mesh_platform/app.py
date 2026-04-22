@@ -47,6 +47,11 @@ def create_app(*, skip_lifespan: bool = False) -> FastAPI:
     from mesh_platform.routers.api_keys import router as api_keys_router
     from mesh_platform.routers.capabilities import router as capabilities_router
     from mesh_platform.routers.admin import router as admin_router
+    from mesh_platform.routers.analytics import router as analytics_router
+    from mesh_platform.routers.scenarios import router as scenarios_router
+    from mesh_platform.routers.marketplace import router as marketplace_router
+    from mesh_platform.routers.webhooks import router as webhooks_router
+    from mesh_platform.routers.sla import router as sla_router
 
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(workspaces_router, prefix="/api/v1")
@@ -57,6 +62,11 @@ def create_app(*, skip_lifespan: bool = False) -> FastAPI:
     app.include_router(api_keys_router, prefix="/api/v1")
     app.include_router(capabilities_router, prefix="/api/v1")
     app.include_router(admin_router, prefix="/api/v1")
+    app.include_router(analytics_router, prefix="/api/v1")
+    app.include_router(scenarios_router, prefix="/api/v1")
+    app.include_router(marketplace_router, prefix="/api/v1")
+    app.include_router(webhooks_router, prefix="/api/v1")
+    app.include_router(sla_router, prefix="/api/v1")
 
     from mesh_platform.gateway.ws_endpoint import router as gateway_router
     app.include_router(gateway_router)

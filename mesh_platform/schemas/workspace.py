@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel
 
@@ -27,3 +27,25 @@ class WorkspaceResponse(BaseModel):
 
 class WorkspaceListResponse(BaseModel):
     workspaces: list[WorkspaceResponse]
+
+
+class RoleEnum(str, Enum):
+    owner = "owner"
+    admin = "admin"
+    operator = "operator"
+    developer = "developer"
+    auditor = "auditor"
+    viewer = "viewer"
+
+
+class RoleUpdateRequest(BaseModel):
+    role: RoleEnum
+
+
+class MembershipResponse(BaseModel):
+    id: str
+    workspace_id: str
+    user_id: str
+    role: str
+
+    model_config = {"from_attributes": True}

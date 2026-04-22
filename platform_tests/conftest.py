@@ -19,6 +19,10 @@ from mesh_platform.models.ledger import LedgerEntry, EscrowRecord  # noqa: F401
 from mesh_platform.models.reputation import ReputationEvent, ReputationSnapshot  # noqa: F401
 from mesh_platform.models.agent import AgentDefinition, AgentStatusLog  # noqa: F401
 from mesh_platform.models.payment import PaymentIntent, PaymentWebhookEvent, Settlement  # noqa: F401
+from mesh_platform.models.scenario import Scenario  # noqa: F401
+from mesh_platform.models.marketplace import AgentTemplate  # noqa: F401
+from mesh_platform.models.webhook import WebhookRegistration, WebhookDelivery  # noqa: F401
+from mesh_platform.models.sla import SLARule, SLAAlert  # noqa: F401
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 

@@ -15,7 +15,20 @@ from mesh_platform.models.base import Base
 class WorkspaceRole(str, PyEnum):
     owner = "owner"
     admin = "admin"
+    operator = "operator"
+    developer = "developer"
+    auditor = "auditor"
     viewer = "viewer"
+
+
+ROLE_LEVELS: dict[str, int] = {
+    WorkspaceRole.owner: 6,
+    WorkspaceRole.admin: 5,
+    WorkspaceRole.operator: 4,
+    WorkspaceRole.developer: 3,
+    WorkspaceRole.auditor: 2,
+    WorkspaceRole.viewer: 1,
+}
 
 
 class Workspace(Base):

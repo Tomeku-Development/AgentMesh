@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getTransactions } from '$lib/api/ledger';
+	import { activeWorkspaceId } from '$lib/stores/workspace';
 	import type { LedgerEntry, LedgerListResponse } from '$lib/types/api';
 
 	// State
@@ -12,7 +13,7 @@
 	const limit = 25;
 	let total = 0;
 
-	const workspaceId = 'default';
+	$: workspaceId = $activeWorkspaceId || 'default';
 
 	// Transaction type options
 	const txTypes = [

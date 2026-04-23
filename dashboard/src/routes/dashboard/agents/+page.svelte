@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getAgents, getAgentStatus } from '$lib/api/agents';
+	import { activeWorkspaceId } from '$lib/stores/workspace';
 	import type { Agent, AgentStatus } from '$lib/types/api';
 
-	const WORKSPACE_ID = 'default';
+	$: WORKSPACE_ID = $activeWorkspaceId || 'default';
 
 	let agents: Agent[] = [];
 	let loading = true;

@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getOrders, getOrderEvents } from '$lib/api/orders';
+	import { activeWorkspaceId } from '$lib/stores/workspace';
 	import type { Order, OrderEvent } from '$lib/types/api';
 
-	const workspaceId = 'default';
+	$: workspaceId = $activeWorkspaceId || 'default';
 	const LIMIT = 20;
 
 	// State

@@ -1,0 +1,373 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  FileText,
+  Image as ImageIcon,
+  BookText,
+  Mail,
+  MessageSquare,
+  Activity,
+  BarChart3,
+  Settings,
+  Users,
+  Search,
+  Bell,
+  HelpCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ArrowUpRight,
+  LogOut,
+  ChevronsUpDown,
+  type LucideIcon,
+} from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
+
+type Item = { href: string; label: string; icon: LucideIcon; soon?: boolean };
+type Group = { title: string; items: Item[] };
+
+const GROUPS: Group[] = [
+  {
+    title: "Workspace",
+    items: [{ href: "/admin", label: "Overview", icon: LayoutDashboard }],
+  },
+  {
+    title: "Content",
+    items: [
+      { href: "/admin/content", label: "Pages & Content", icon: FileText },
+      { href: "/admin/docs", label: "Documentation", icon: BookText },
+      { href: "/admin/media", label: "Media", icon: ImageIcon },
+    ],
+  },
+  {
+    title: "Audience",
+    items: [
+      { href: "/admin/subscribers", label: "Subscribers", icon: Mail },
+      { href: "/admin/messages", label: "Messages", icon: MessageSquare },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
+      { href: "/admin/stats", label: "Network Stats", icon: Activity },
+      { href: "/admin/analytics", label: "Analytics", icon: BarChart3, soon: true },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { href: "/admin/users", label: "Users & Roles", icon: Users },
+      { href: "/admin/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
+type User = { name: string; email: string; role: string };
+
+export function AdminShell({
+  workspace,
+  user,
+  initialCollapsed = false,
+  children,
+}: {
+  workspace: string;
+  user: User;
+  initialCollapsed?: boolean;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const isActive = (href: string) =>
+    href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  function toggleCollapse() {
+    setCollapsed((c) => {
+      const next = !c;
+      document.cookie = `am_admin_collapsed=${next ? "1" : "0"};path=/;max-age=31536000`;
+      return next;
+    });
+  }
+
+  async function signOut() {
+    await authClient.signOut();
+    router.push("/admin/login");
+    router.refresh();
+  }
+
+  const initials =
+    user.name
+      .split(" ")
+      .map((p) => p[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "AM";
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-sidebar transition-[width,transform] duration-200",
+          collapsed ? "w-[72px]" : "w-[260px]",
+          mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+        )}
+      >
+        <div className="flex h-16 items-center px-4">
+          <Image
+            src={
+              collapsed
+                ? "/images/logos/agentmesh/AgentMesh_App_Icon_Orange.png"
+                : "/images/logos/agentmesh/AgentMesh_Wordmark_White_RGB.png"
+            }
+            alt="AgentMesh"
+            width={collapsed ? 28 : 130}
+            height={28}
+            className={collapsed ? "size-7" : "h-6 w-auto"}
+          />
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 py-2">
+          {GROUPS.map((group) => (
+            <div key={group.title} className="mb-4">
+              {!collapsed && (
+                <p className="px-3 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  {group.title}
+                </p>
+              )}
+              <ul className="flex flex-col gap-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = !item.soon && isActive(item.href);
+                  const inner = (
+                    <>
+                      <Icon className="size-[18px] shrink-0" />
+                      {!collapsed && (
+                        <span className="flex-1 truncate">{item.label}</span>
+                      )}
+                      {!collapsed && item.soon && (
+                        <span className="rounded bg-secondary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Soon
+                        </span>
+                      )}
+                    </>
+                  );
+                  const base =
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors";
+                  return (
+                    <li key={item.href}>
+                      {item.soon ? (
+                        <span
+                          title={collapsed ? `${item.label} (soon)` : undefined}
+                          className={cn(
+                            base,
+                            "cursor-not-allowed text-muted-foreground/50",
+                          )}
+                        >
+                          {inner}
+                        </span>
+                      ) : (
+                        <Link
+                          href={item.href}
+                          title={collapsed ? item.label : undefined}
+                          onClick={() => setMobileOpen(false)}
+                          className={cn(
+                            base,
+                            active
+                              ? "bg-brand/10 text-brand"
+                              : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                          )}
+                        >
+                          {inner}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-border p-3">
+          <div className="flex flex-col gap-0.5">
+            <Link
+              href="/"
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
+                collapsed && "justify-center",
+              )}
+              title="View site"
+            >
+              <ArrowUpRight className="size-[18px]" />
+              {!collapsed && "View site"}
+            </Link>
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className={cn(
+                "hidden cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:flex",
+                collapsed && "justify-center",
+              )}
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="size-[18px]" />
+              ) : (
+                <>
+                  <PanelLeftClose className="size-[18px]" />
+                  Collapse
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      {/* Main column */}
+      <div
+        className={cn(
+          "flex min-h-screen flex-col transition-[padding] duration-200",
+          collapsed ? "lg:pl-[72px]" : "lg:pl-[260px]",
+        )}
+      >
+        {/* Topbar */}
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:px-6">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md border border-border text-foreground lg:hidden"
+            aria-label="Open menu"
+          >
+            <PanelLeftOpen className="size-5" />
+          </button>
+
+          <div className="relative hidden max-w-md flex-1 sm:block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              placeholder="Search anything..."
+              className="h-9 w-full rounded-lg border border-border bg-card pl-9 pr-12 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-brand/50 focus:ring-2 focus:ring-brand/20"
+            />
+            <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              ⌘K
+            </kbd>
+          </div>
+
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              className="relative inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              aria-label="Notifications"
+            >
+              <Bell className="size-[18px]" />
+              <span className="absolute right-2 top-2 size-1.5 rounded-full bg-brand" />
+            </button>
+            <button
+              type="button"
+              className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              aria-label="Help"
+            >
+              <HelpCircle className="size-[18px]" />
+            </button>
+            <div className="mx-1 h-6 w-px bg-border" />
+
+            {/* User menu */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-expanded={menuOpen}
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-secondary"
+              >
+                <span className="flex size-8 items-center justify-center rounded-full bg-brand/15 text-xs font-bold text-brand">
+                  {initials}
+                </span>
+                <span className="hidden leading-tight text-left sm:block">
+                  <span className="block text-sm font-medium text-foreground">
+                    {user.name}
+                  </span>
+                  <span className="block text-[11px] capitalize text-muted-foreground">
+                    {user.role} · {workspace}
+                  </span>
+                </span>
+                <ChevronsUpDown className="hidden size-3.5 text-muted-foreground sm:block" />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-2xl shadow-black/40">
+                  <div className="border-b border-border px-3 py-2.5">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {user.name}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
+                  </div>
+                  <div className="py-1">
+                    <Link
+                      href="/admin/users"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <Users className="size-4" />
+                      Users & roles
+                    </Link>
+                    <Link
+                      href="/admin/settings"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <Settings className="size-4" />
+                      Settings
+                    </Link>
+                  </div>
+                  <div className="border-t border-border pt-1">
+                    <button
+                      type="button"
+                      onClick={signOut}
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <LogOut className="size-4" />
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 p-5 sm:p-8">{children}</main>
+      </div>
+    </div>
+  );
+}

@@ -246,6 +246,34 @@ Run inside `web/`:
 
 ---
 
+## Deployment &amp; CI/CD
+
+**Hosting (Vercel)** — the app lives in `web/`, so set the Vercel project's
+**Root Directory** to `web`. Vercel auto-detects npm via `package-lock.json`
+and deploys on every push (preview for PRs, production for `main`).
+
+Configure these in the Vercel project (Production + Preview):
+
+- `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`
+- `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`,
+  `S3_ENDPOINT`, `S3_PUBLIC_BASE_URL`
+
+> Use a **separate database** for Preview vs Production so PR deployments never
+> touch production data. Never use the `NEXT_PUBLIC_` prefix for secrets.
+
+**Continuous Integration (GitHub Actions)** — `.github/workflows/ci.yml` runs
+on every push and PR to `main`: `npm ci` → `npm run lint` → `npm run build`.
+This is the quality gate; Vercel handles the actual deploy (CD). The build uses
+safe fallback data, so CI needs no secrets.
+
+```text
+push / PR ──▶ GitHub Actions (lint + build)        ── quality gate
+push to main ─▶ Vercel (build + deploy production)  ── CD
+open PR ──────▶ Vercel (preview deployment)         ── per-PR preview
+```
+
+---
+
 ## Architecture
 
 ```text

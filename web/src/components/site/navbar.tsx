@@ -208,10 +208,10 @@ export function Navbar() {
         </nav>
       </header>
 
-      {/* Mobile drawer + backdrop */}
+      {/* Mobile drawer + backdrop (above the fixed header) */}
       <div
         className={cn(
-          "fixed inset-0 z-40 lg:hidden",
+          "fixed inset-0 z-[60] lg:hidden",
           mobileOpen ? "pointer-events-auto" : "pointer-events-none",
         )}
         aria-hidden={!mobileOpen}
@@ -227,8 +227,9 @@ export function Navbar() {
 
         {/* Drawer */}
         <aside
+          style={{ backgroundColor: "#050505" }}
           className={cn(
-            "absolute right-0 top-0 flex h-full w-[86%] max-w-sm flex-col border-l border-border bg-background shadow-2xl shadow-black/50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+            "absolute right-0 top-0 flex h-full w-[86%] max-w-sm flex-col border-l border-border shadow-2xl shadow-black/50 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
             mobileOpen ? "translate-x-0" : "translate-x-full",
           )}
         >

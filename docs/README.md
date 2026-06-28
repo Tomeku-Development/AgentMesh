@@ -45,6 +45,7 @@ Start with the **Overview**, then branch by interest:
 | 17 | [Go-To-Market](./17_GO_TO_MARKET.md) | GTM strategy and plan |
 | 18 | [Casper Alignment](./18_CASPER_ALIGNMENT.md) | Buildathon and ecosystem fit |
 | 19 | [Tokenomics (Future)](./19_TOKENOMICS.md) | Forward-looking token design |
+| 20 | [Analytics](./20_ANALYTICS.md) | Measurement readiness, event plan, conversions, and setup |
 
 ---
 

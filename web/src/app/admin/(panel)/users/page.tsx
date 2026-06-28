@@ -21,6 +21,17 @@ type UserRow = {
   createdAt: string | Date;
 };
 
+type AdminListUsersApi = {
+  listUsers(args: {
+    query: {
+      limit: number;
+      sortBy: string;
+      sortDirection: "asc" | "desc";
+    };
+    headers: Headers;
+  }): Promise<{ users?: unknown[] }>;
+};
+
 const fmt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 export default async function AdminUsersPage() {
@@ -29,7 +40,8 @@ export default async function AdminUsersPage() {
 
   let users: UserRow[] = [];
   try {
-    const res = await auth.api.listUsers({
+    const adminApi = auth.api as typeof auth.api & AdminListUsersApi;
+    const res = await adminApi.listUsers({
       query: { limit: 200, sortBy: "createdAt", sortDirection: "desc" },
       headers: await headers(),
     });

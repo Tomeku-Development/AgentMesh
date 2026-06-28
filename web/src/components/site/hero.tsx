@@ -46,7 +46,14 @@ export async function Hero() {
               size="lg"
               className="h-12 rounded-md px-6 text-sm font-semibold shadow-[0_0_40px_-8px] shadow-brand/60"
             >
-              <Link href="#app">
+              <Link
+                href="#app"
+                data-analytics-event="cta_clicked"
+                data-analytics-label="launch_app"
+                data-analytics-section="hero"
+                data-analytics-placement="primary"
+                data-analytics-destination="#app"
+              >
                 Launch App
                 <ArrowUpRight className="size-4" />
               </Link>
@@ -57,7 +64,14 @@ export async function Hero() {
               variant="outline"
               className="h-12 rounded-md border-border bg-background/40 px-6 text-sm font-semibold backdrop-blur"
             >
-              <Link href="#how-it-works">
+              <Link
+                href="#how-it-works"
+                data-analytics-event="cta_clicked"
+                data-analytics-label="see_how_it_works"
+                data-analytics-section="hero"
+                data-analytics-placement="secondary"
+                data-analytics-destination="#how-it-works"
+              >
                 <span className="flex size-5 items-center justify-center rounded-full bg-brand/15 ring-1 ring-inset ring-brand/30">
                   <Play className="size-2.5 fill-brand text-brand" />
                 </span>

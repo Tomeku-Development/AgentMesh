@@ -7,6 +7,7 @@ import {
   integer,
   bigint,
   boolean,
+  jsonb,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -129,3 +130,41 @@ export const docPages = pgTable(
 
 export type DocPage = typeof docPages.$inferSelect;
 export type NewDocPage = typeof docPages.$inferInsert;
+
+/**
+ * Payment checkout attempts and webhook updates across supported providers.
+ * Amounts are stored in minor units (cents for USD, centavos for PHP).
+ */
+export const paymentTransactions = pgTable(
+  "payment_transactions",
+  {
+    id: serial("id").primaryKey(),
+    provider: varchar("provider", { length: 32 }).notNull(),
+    providerTransactionId: varchar("provider_transaction_id", {
+      length: 256,
+    }),
+    checkoutUrl: text("checkout_url"),
+    plan: varchar("plan", { length: 80 }).notNull(),
+    amount: integer("amount").notNull(),
+    currency: varchar("currency", { length: 12 }).notNull().default("USD"),
+    status: varchar("status", { length: 40 }).notNull().default("pending"),
+    customerEmail: varchar("customer_email", { length: 320 }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    providerIdIdx: uniqueIndex("payment_transactions_provider_id_idx").on(
+      table.provider,
+      table.providerTransactionId,
+    ),
+  }),
+);
+
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type NewPaymentTransaction = typeof paymentTransactions.$inferInsert;

@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowRight, Loader2, Check } from "lucide-react";
 import { subscribe, type SubscribeState } from "@/app/actions/subscribe";
+import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 const initialState: SubscribeState = { status: "idle", message: "" };
@@ -30,11 +31,30 @@ function SubmitButton() {
 
 export function SubscribeForm() {
   const [state, formAction] = useActionState(subscribe, initialState);
+  const lastStatusRef = useRef(state.status);
+
+  useEffect(() => {
+    if (state.status === "idle" || lastStatusRef.current === state.status) {
+      return;
+    }
+    lastStatusRef.current = state.status;
+
+    trackEvent(
+      state.status === "success"
+        ? "newsletter_signup_completed"
+        : "newsletter_signup_failed",
+      {
+        form_name: "newsletter",
+        page_path: window.location.pathname,
+      },
+    );
+  }, [state.status]);
 
   return (
     <div className="w-full max-w-md">
       <form
         action={formAction}
+        data-analytics-form="newsletter"
         className="flex flex-col gap-3 sm:flex-row sm:items-center"
       >
         <input

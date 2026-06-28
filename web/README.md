@@ -104,6 +104,8 @@ highlighting; GitHub opens externally. Navbar and footer are global (rendered in
 | --- | --- |
 | `GET /api/health` | Service health + live PostgreSQL connectivity probe |
 | `GET /api/stats` | Live network stats (falls back to defaults without a DB) |
+| `POST /api/checkout` | Creates hosted Pro checkout via Xendit, Stripe, or Polar |
+| `POST /api/payments/webhook/[provider]` | Records provider payment status callbacks |
 
 Backend-connected features:
 
@@ -124,7 +126,21 @@ A role-based admin (BetterAuth + Postgres) manages content, docs, media, and use
   defaults to **user**.
 - **Roles:** only `admin` users can access `/admin`. Manage users at
   `/admin/users` (invite, promote/demote, ban, delete).
+- **Two-factor auth:** admins can enable authenticator-app TOTP from
+  `/admin/account`. Sign-in then redirects to `/admin/two-factor` for the
+  second factor. Backup codes are shown once during setup.
+- **Passkeys:** admins can add Touch ID, Face ID, Windows Hello, or hardware
+  security keys from `/admin/account`, then use them on `/admin/login`.
+- **API keys:** admins can create local API keys from `/admin/account`.
+  Generated keys are hashed at rest and shown only once.
+- **Organizations:** the Better Auth organization plugin is enabled at
+  `/admin/organization`; only admins can create organizations.
+- **Last login method:** Better Auth records the last login method and shows it
+  in the account session details.
 - Set `BETTER_AUTH_SECRET` (and `BETTER_AUTH_URL` in production).
+- In production, set `BETTER_AUTH_URL=https://www.agentmesh.world` and, if
+  you serve both apex and `www`, set
+  `BETTER_AUTH_TRUSTED_ORIGINS=https://www.agentmesh.world,https://agentmesh.world`.
 
 | Section | Path | What it does |
 | --- | --- | --- |
@@ -135,8 +151,30 @@ A role-based admin (BetterAuth + Postgres) manages content, docs, media, and use
 | Subscribers | `/admin/subscribers` | View + **export CSV** |
 | Messages | `/admin/messages` | View + **export CSV** |
 | Network Stats | `/admin/stats` | Edit live stats |
+| Analytics | `/admin/analytics` | Lead conversion and tracking setup |
+| Sales | `/admin/sales` | Payment gateway readiness + checkout attempts |
+| Reports | `/admin/reports` | Launch readiness, sales, and setup checks |
 | Users & Roles | `/admin/users` | Manage accounts and roles |
-| Settings | `/admin/settings` | Global site identity + default SEO |
+| Organization | `/admin/organization` | Manage admin organizations |
+| Website settings | `/admin/settings` | Global site identity + default SEO |
+
+## Payments
+
+Xendit is the default checkout gateway. Stripe and Polar are configured as
+fallback providers. Without provider credentials, `/api/checkout` redirects the
+visitor to the contact form with a setup-required flag instead of breaking the
+pricing page.
+
+```env
+PAYMENT_DEFAULT_PROVIDER="xendit"
+XENDIT_SECRET_KEY="..."
+STRIPE_SECRET_KEY="..."
+POLAR_ACCESS_TOKEN="..."
+POLAR_PRO_PRODUCT_ID="..."
+```
+
+Run `npm run db:migrate` after pulling this change so
+`payment_transactions` exists before checkout/webhook traffic arrives.
 
 ## Documentation CMS
 
@@ -174,3 +212,17 @@ notice.
 - The stats bar reads from `network_stats`; if the DB is unset or empty it
   falls back to representative values so the page never breaks.
 - The site is dark-themed by default to match the AgentMesh brand.
+
+## Analytics
+
+Analytics is optional and disabled until provider env vars are configured.
+The app tracks page views, CTA clicks, form starts, and successful/failed lead
+forms without sending names, emails, company names, or message text.
+
+```env
+NEXT_PUBLIC_GA_MEASUREMENT_ID="G-..."
+NEXT_PUBLIC_POSTHOG_KEY="phc_..."
+NEXT_PUBLIC_POSTHOG_HOST="https://app.posthog.com"
+```
+
+See `../docs/20_ANALYTICS.md` for the measurement plan and validation checklist.

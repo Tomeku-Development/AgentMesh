@@ -64,17 +64,44 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Button
-                asChild
-                className={cn(
-                  "mt-8 h-11 w-full rounded-md",
-                  !tier.highlighted &&
-                    "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-                )}
-                variant={tier.highlighted ? "default" : "secondary"}
-              >
-                <Link href={tier.cta.href}>{tier.cta.label}</Link>
-              </Button>
+              {tier.name === "Pro" ? (
+                <form action="/api/checkout" method="POST" className="mt-8">
+                  <input type="hidden" name="plan" value="pro" />
+                  <input type="hidden" name="provider" value="xendit" />
+                  <Button
+                    type="submit"
+                    className="h-11 w-full rounded-md"
+                    data-analytics-event="cta_clicked"
+                    data-analytics-label="checkout_pro"
+                    data-analytics-section="pricing"
+                    data-analytics-placement="pro"
+                    data-analytics-destination="/api/checkout"
+                  >
+                    Checkout with Xendit
+                  </Button>
+                </form>
+              ) : (
+                <Button
+                  asChild
+                  className={cn(
+                    "mt-8 h-11 w-full rounded-md",
+                    !tier.highlighted &&
+                      "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+                  )}
+                  variant={tier.highlighted ? "default" : "secondary"}
+                >
+                  <Link
+                    href={tier.cta.href}
+                    data-analytics-event="cta_clicked"
+                    data-analytics-label={tier.cta.label.toLowerCase().replace(/\s+/g, "_")}
+                    data-analytics-section="pricing"
+                    data-analytics-placement={tier.name.toLowerCase().replace(/\s+/g, "_")}
+                    data-analytics-destination={tier.cta.href}
+                  >
+                    {tier.cta.label}
+                  </Link>
+                </Button>
+              )}
             </div>
           ))}
         </div>

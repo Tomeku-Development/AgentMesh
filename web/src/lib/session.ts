@@ -10,6 +10,13 @@ export async function getSession() {
   return auth.api.getSession({ headers: await headers() });
 }
 
+/** Return the current session only when it belongs to an admin user. */
+export async function getAdminSession() {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") return null;
+  return session;
+}
+
 /** Require an authenticated admin; redirect to login otherwise. */
 export async function requireAdmin() {
   const session = await getSession();

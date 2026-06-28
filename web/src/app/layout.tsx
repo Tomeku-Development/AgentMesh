@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/site/navbar";
 import { Footer } from "@/components/site/footer";
 import { FooterGate } from "@/components/site/footer-gate";
+import { AnalyticsProvider } from "@/components/site/analytics-provider";
 import { getSiteContent } from "@/lib/data/site-content";
 
 const inter = Inter({
@@ -63,6 +64,7 @@ export default function RootLayout({
       className={`${inter.variable} ${sora.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <AnalyticsProvider />
         <Navbar />
         <div className="flex flex-1 flex-col">{children}</div>
         <FooterGate>

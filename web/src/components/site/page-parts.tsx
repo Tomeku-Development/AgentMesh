@@ -158,7 +158,14 @@ export function CtaBand({
         )}
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button asChild size="lg" className="h-12 rounded-md px-6">
-            <Link href={primary.href}>
+            <Link
+              href={primary.href}
+              data-analytics-event="cta_clicked"
+              data-analytics-label={primary.label.toLowerCase().replace(/\s+/g, "_")}
+              data-analytics-section="cta_band"
+              data-analytics-placement="primary"
+              data-analytics-destination={primary.href}
+            >
               {primary.label}
               <ArrowRight className="size-4" />
             </Link>
@@ -170,7 +177,16 @@ export function CtaBand({
               variant="outline"
               className="h-12 rounded-md border-border bg-transparent px-6"
             >
-              <Link href={secondary.href}>{secondary.label}</Link>
+              <Link
+                href={secondary.href}
+                data-analytics-event="cta_clicked"
+                data-analytics-label={secondary.label.toLowerCase().replace(/\s+/g, "_")}
+                data-analytics-section="cta_band"
+                data-analytics-placement="secondary"
+                data-analytics-destination={secondary.href}
+              >
+                {secondary.label}
+              </Link>
             </Button>
           )}
         </div>

@@ -28,7 +28,14 @@ export function Features() {
               variant="outline"
               className="rounded-md border-border bg-transparent"
             >
-              <Link href="#solutions">
+              <Link
+                href="#solutions"
+                data-analytics-event="cta_clicked"
+                data-analytics-label="explore_platform"
+                data-analytics-section="features"
+                data-analytics-placement="secondary"
+                data-analytics-destination="#solutions"
+              >
                 Explore Platform
                 <ArrowUpRight className="size-4" />
               </Link>

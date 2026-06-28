@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { mediaAssets } from "@/lib/db/schema";
+import { getAdminSession } from "@/lib/session";
 import { isStorageConfigured, uploadObject } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -28,6 +29,11 @@ function slugify(name: string) {
 }
 
 export async function POST(req: Request) {
+  const session = await getAdminSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   if (!isStorageConfigured()) {
     return NextResponse.json(
       { error: "Storage is not configured. Set S3 / R2 env vars." },

@@ -1,9 +1,15 @@
 import { getSubscribers } from "@/lib/data/admin";
 import { toCsv, csvFilename } from "@/lib/csv";
+import { getAdminSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const session = await getAdminSession();
+  if (!session) {
+    return new Response("Unauthorized.", { status: 401 });
+  }
+
   const rows = await getSubscribers();
   const csv = toCsv(
     ["id", "email", "created_at"],

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
 const fieldClass =
@@ -19,6 +19,7 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [passkeyPending, setPasskeyPending] = useState(false);
   const [error, setError] = useState<string | null>(
     initialError === "forbidden"
       ? "That account doesn't have admin access."
@@ -58,6 +59,24 @@ export function LoginForm({
       setError("Something went wrong. Please try again.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function signInWithPasskey() {
+    setPasskeyPending(true);
+    setError(null);
+    try {
+      const { error } = await authClient.signIn.passkey();
+      if (error) {
+        setError(error.message ?? "Could not sign in with passkey.");
+        return;
+      }
+      router.push(next);
+      router.refresh();
+    } catch {
+      setError("Passkey sign-in was canceled or failed.");
+    } finally {
+      setPasskeyPending(false);
     }
   }
 
@@ -120,7 +139,7 @@ export function LoginForm({
 
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || passkeyPending}
         className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-brand text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? (
@@ -131,6 +150,22 @@ export function LoginForm({
           "Sign in"
         )}
       </button>
+
+      {mode === "signin" && (
+        <button
+          type="button"
+          onClick={signInWithPasskey}
+          disabled={pending || passkeyPending}
+          className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-card text-sm font-semibold text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {passkeyPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Fingerprint className="size-4" />
+          )}
+          Sign in with passkey
+        </button>
+      )}
     </form>
   );
 }

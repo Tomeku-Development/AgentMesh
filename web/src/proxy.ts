@@ -9,7 +9,11 @@ import { getSessionCookie } from "better-auth/cookies";
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname === "/admin/login" || pathname.startsWith("/api/auth")) {
+  if (
+    pathname === "/admin/login" ||
+    pathname === "/admin/two-factor" ||
+    pathname.startsWith("/api/auth")
+  ) {
     return NextResponse.next();
   }
 

@@ -42,7 +42,14 @@ export function HowItWorks() {
           </ol>
 
           <Button asChild variant="link" className="mt-8 h-auto p-0 text-brand">
-            <Link href="#docs">
+            <Link
+              href="#docs"
+              data-analytics-event="cta_clicked"
+              data-analytics-label="learn_more"
+              data-analytics-section="how_it_works"
+              data-analytics-placement="text"
+              data-analytics-destination="#docs"
+            >
               Learn More
               <ArrowRight className="size-4" />
             </Link>

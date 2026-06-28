@@ -16,7 +16,7 @@ export default async function AdminSettingsPage() {
     <div className="mx-auto max-w-3xl">
       <header className="mb-8">
         <h1 className="font-heading text-2xl font-bold text-foreground">
-          Settings
+          Website Settings
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Global site identity and default SEO metadata. Applied across the

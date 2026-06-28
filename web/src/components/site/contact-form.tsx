@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Loader2, Check, ArrowRight } from "lucide-react";
 import { submitContact, type ContactState } from "@/app/actions/contact";
+import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
 const initialState: ContactState = { status: "idle", message: "" };
@@ -33,6 +34,24 @@ function SubmitButton() {
 
 export function ContactForm() {
   const [state, formAction] = useActionState(submitContact, initialState);
+  const lastStatusRef = useRef(state.status);
+
+  useEffect(() => {
+    if (state.status === "idle" || lastStatusRef.current === state.status) {
+      return;
+    }
+    lastStatusRef.current = state.status;
+
+    trackEvent(
+      state.status === "success"
+        ? "contact_message_sent"
+        : "contact_message_failed",
+      {
+        form_name: "contact",
+        page_path: window.location.pathname,
+      },
+    );
+  }, [state.status]);
 
   if (state.status === "success") {
     return (
@@ -49,7 +68,12 @@ export function ContactForm() {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4" noValidate>
+    <form
+      action={formAction}
+      data-analytics-form="contact"
+      className="flex flex-col gap-4"
+      noValidate
+    >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="name" className="text-sm font-medium text-foreground">

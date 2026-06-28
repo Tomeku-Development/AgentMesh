@@ -13,6 +13,10 @@ import {
   MessageSquare,
   Activity,
   BarChart3,
+  BookOpen,
+  Bug,
+  Building2,
+  CreditCard,
   Settings,
   Users,
   Search,
@@ -23,6 +27,7 @@ import {
   ArrowUpRight,
   LogOut,
   ChevronsUpDown,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
@@ -55,28 +60,39 @@ const GROUPS: Group[] = [
     title: "Insights",
     items: [
       { href: "/admin/stats", label: "Network Stats", icon: Activity },
-      { href: "/admin/analytics", label: "Analytics", icon: BarChart3, soon: true },
+      { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/admin/sales", label: "Sales", icon: CreditCard },
+      { href: "/admin/reports", label: "Reports", icon: Bug },
     ],
   },
   {
     title: "System",
     items: [
       { href: "/admin/users", label: "Users & Roles", icon: Users },
-      { href: "/admin/settings", label: "Settings", icon: Settings },
+      { href: "/admin/organization", label: "Organization", icon: Building2 },
+      { href: "/admin/settings", label: "Website settings", icon: Settings },
     ],
   },
 ];
 
 type User = { name: string; email: string; role: string };
+type Notification = {
+  title: string;
+  detail: string;
+  href: string;
+  tone: "info" | "warning" | "success";
+};
 
 export function AdminShell({
   workspace,
   user,
+  notifications = [],
   initialCollapsed = false,
   children,
 }: {
   workspace: string;
   user: User;
+  notifications?: Notification[];
   initialCollapsed?: boolean;
   children: React.ReactNode;
 }) {
@@ -85,7 +101,11 @@ export function AdminShell({
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const helpRef = useRef<HTMLDivElement>(null);
 
   const isActive = (href: string) =>
     href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
@@ -94,6 +114,15 @@ export function AdminShell({
     const onClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+      }
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(e.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
+      if (helpRef.current && !helpRef.current.contains(e.target as Node)) {
+        setHelpOpen(false);
       }
     };
     document.addEventListener("mousedown", onClick);
@@ -283,21 +312,115 @@ export function AdminShell({
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              className="relative inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              aria-label="Notifications"
-            >
-              <Bell className="size-[18px]" />
-              <span className="absolute right-2 top-2 size-1.5 rounded-full bg-brand" />
-            </button>
-            <button
-              type="button"
-              className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              aria-label="Help"
-            >
-              <HelpCircle className="size-[18px]" />
-            </button>
+            <div className="relative" ref={notificationsRef}>
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen((open) => !open)}
+                className="relative inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Notifications"
+                aria-expanded={notificationsOpen}
+              >
+                <Bell className="size-[18px]" />
+                {notifications.length > 0 && (
+                  <span className="absolute right-2 top-2 size-1.5 rounded-full bg-brand" />
+                )}
+              </button>
+              {notificationsOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 overflow-hidden rounded-xl border border-border bg-card shadow-2xl shadow-black/40">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Notifications
+                    </p>
+                    <span className="text-xs text-muted-foreground">
+                      {notifications.length}
+                    </span>
+                  </div>
+                  {notifications.length === 0 ? (
+                    <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      Nothing needs attention.
+                    </p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {notifications.map((item) => (
+                        <Link
+                          key={`${item.title}-${item.href}`}
+                          href={item.href}
+                          onClick={() => setNotificationsOpen(false)}
+                          className="block px-4 py-3 transition-colors hover:bg-secondary"
+                        >
+                          <div className="flex gap-3">
+                            <span
+                              className={cn(
+                                "mt-1 size-2 shrink-0 rounded-full",
+                                item.tone === "warning"
+                                  ? "bg-warning"
+                                  : item.tone === "success"
+                                    ? "bg-success"
+                                    : "bg-brand",
+                              )}
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {item.title}
+                              </p>
+                              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                {item.detail}
+                              </p>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="relative" ref={helpRef}>
+              <button
+                type="button"
+                onClick={() => setHelpOpen((open) => !open)}
+                className="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Help"
+                aria-expanded={helpOpen}
+              >
+                <HelpCircle className="size-[18px]" />
+              </button>
+              {helpOpen && (
+                <div className="absolute right-0 top-full mt-2 w-72 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-2xl shadow-black/40">
+                  <Link
+                    href="/admin/reports"
+                    onClick={() => setHelpOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <BarChart3 className="size-4" />
+                    Reports & readiness
+                  </Link>
+                  <Link
+                    href="/admin/sales"
+                    onClick={() => setHelpOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <CreditCard className="size-4" />
+                    Sales & payments
+                  </Link>
+                  <Link
+                    href="/admin/docs"
+                    onClick={() => setHelpOpen(false)}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <BookOpen className="size-4" />
+                    Documentation CMS
+                  </Link>
+                  <a
+                    href="mailto:admin@agentmesh.world?subject=AgentMesh%20admin%20bug%20report"
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <Bug className="size-4" />
+                    Report bug
+                  </a>
+                </div>
+              )}
+            </div>
             <div className="mx-1 h-6 w-px bg-border" />
 
             {/* User menu */}
@@ -334,6 +457,14 @@ export function AdminShell({
                   </div>
                   <div className="py-1">
                     <Link
+                      href="/admin/account"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    >
+                      <UserCircle className="size-4" />
+                      Account settings
+                    </Link>
+                    <Link
                       href="/admin/users"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
@@ -347,7 +478,7 @@ export function AdminShell({
                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                     >
                       <Settings className="size-4" />
-                      Settings
+                      Website settings
                     </Link>
                   </div>
                   <div className="border-t border-border pt-1">

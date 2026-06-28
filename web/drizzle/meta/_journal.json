@@ -29,6 +29,27 @@
       "when": 1782515984272,
       "tag": "0003_furry_nehzno",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782673200000,
+      "tag": "0004_two_factor_auth",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782675000000,
+      "tag": "0005_auth_plugins",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782676800000,
+      "tag": "0006_payments_readiness",
+      "breakpoints": true
     }
   ]
 }

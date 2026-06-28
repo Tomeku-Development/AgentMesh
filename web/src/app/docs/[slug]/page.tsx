@@ -112,7 +112,7 @@ export default async function DocPage({
               "[&_table]:mt-4 [&_table]:w-full [&_th]:border [&_th]:border-border [&_th]:bg-secondary [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-foreground [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2",
               "[&_img]:mt-4 [&_img]:rounded-xl [&_img]:border [&_img]:border-border",
             )}
-            // Admin-authored, trusted content.
+            // Sanitized HTML generated from Markdown.
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </article>

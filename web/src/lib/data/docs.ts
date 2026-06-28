@@ -1,14 +1,43 @@
 import "server-only";
 import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { docPages, type DocPage } from "@/lib/db/schema";
 
 marked.setOptions({ gfm: true, breaks: false });
 
-/** Render trusted (admin-authored) Markdown to HTML. */
+const ALLOWED_TAGS = sanitizeHtml.defaults.allowedTags.concat([
+  "h1",
+  "h2",
+  "img",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+]);
+
+/** Render admin-authored Markdown to sanitized HTML. */
 export function renderMarkdown(md: string): string {
-  return marked.parse(md, { async: false }) as string;
+  const html = marked.parse(md, { async: false }) as string;
+  return sanitizeHtml(html, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      a: ["href", "name", "target", "rel", "title"],
+      img: ["src", "alt", "title", "width", "height", "loading"],
+      th: ["align"],
+      td: ["align"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", {
+        rel: "noopener noreferrer",
+      }),
+    },
+  });
 }
 
 export async function getPublishedDocs(): Promise<DocPage[]> {

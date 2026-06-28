@@ -171,7 +171,14 @@ export function Navbar() {
               variant="outline"
               className="rounded-md border-border bg-transparent"
             >
-              <Link href="/contact">
+              <Link
+                href="/contact"
+                data-analytics-event="cta_clicked"
+                data-analytics-label="launch_app"
+                data-analytics-section="navbar"
+                data-analytics-placement="desktop"
+                data-analytics-destination="/contact"
+              >
                 Launch App
                 <ArrowUpRight className="size-4" />
               </Link>
@@ -269,7 +276,15 @@ export function Navbar() {
 
           <div className="border-t border-border p-4">
             <Button asChild className="h-11 w-full rounded-md">
-              <Link href="/contact" onClick={() => setMobileOpen(false)}>
+              <Link
+                href="/contact"
+                onClick={() => setMobileOpen(false)}
+                data-analytics-event="cta_clicked"
+                data-analytics-label="launch_app"
+                data-analytics-section="navbar"
+                data-analytics-placement="mobile"
+                data-analytics-destination="/contact"
+              >
                 Launch App
                 <ArrowUpRight className="size-4" />
               </Link>

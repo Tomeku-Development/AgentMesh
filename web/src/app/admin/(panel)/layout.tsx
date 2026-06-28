@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { getSiteContent } from "@/lib/data/site-content";
+import { getAdminNotifications } from "@/lib/data/admin";
 import { requireAdmin } from "@/lib/session";
 import { AdminShell } from "./admin-shell";
 
@@ -14,14 +15,18 @@ export default async function AdminPanelLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [session, c, cookieStore] = await Promise.all([
+  const [session, c, cookieStore, notifications] = await Promise.all([
     requireAdmin(),
     getSiteContent(),
     cookies(),
+    getAdminNotifications(),
   ]);
 
   const workspace = `${c["settings.site_name"]} HQ`;
   const initialCollapsed = cookieStore.get("am_admin_collapsed")?.value === "1";
+  const adminUser = session.user as typeof session.user & {
+    role?: string | null;
+  };
 
   return (
     <AdminShell
@@ -29,9 +34,10 @@ export default async function AdminPanelLayout({
       user={{
         name: session.user.name,
         email: session.user.email,
-        role: (session.user.role as string) ?? "user",
+        role: adminUser.role ?? "user",
       }}
       initialCollapsed={initialCollapsed}
+      notifications={notifications}
     >
       {children}
     </AdminShell>

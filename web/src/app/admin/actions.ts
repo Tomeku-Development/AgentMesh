@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { networkStats, siteContent, mediaAssets, docPages } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { CONTENT_FIELDS } from "@/lib/data/site-content";
+import { requireAdmin } from "@/lib/session";
 import { deleteObject } from "@/lib/storage";
 
 export type SaveState = {
@@ -15,12 +16,101 @@ export type SaveState = {
   message: string;
 };
 
+type AuthApiArgs = {
+  body: Record<string, unknown>;
+  headers: Headers;
+};
+
+type AdminAuthApi = {
+  createUser(args: AuthApiArgs): Promise<unknown>;
+  setRole(args: AuthApiArgs): Promise<unknown>;
+  banUser(args: AuthApiArgs): Promise<unknown>;
+  unbanUser(args: AuthApiArgs): Promise<unknown>;
+  removeUser(args: AuthApiArgs): Promise<unknown>;
+};
+
+const adminAuthApi = auth.api as typeof auth.api & AdminAuthApi;
+
+/* ---------------------------- Account ---------------------------- */
+
+export async function updateAccountProfile(
+  _prev: SaveState,
+  formData: FormData,
+): Promise<SaveState> {
+  await requireAdmin();
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2 || name.length > 120) {
+    return {
+      status: "error",
+      message: "Enter a name between 2 and 120 characters.",
+    };
+  }
+
+  try {
+    await auth.api.updateUser({
+      body: { name },
+      headers: await headers(),
+    });
+    revalidatePath("/admin", "layout");
+    revalidatePath("/admin/account");
+    return { status: "success", message: "Profile updated." };
+  } catch (error) {
+    console.error("[admin] updateAccountProfile failed:", error);
+    return { status: "error", message: "Failed to update profile." };
+  }
+}
+
+export async function changeAccountPassword(
+  _prev: SaveState,
+  formData: FormData,
+): Promise<SaveState> {
+  await requireAdmin();
+
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  const revokeOtherSessions = formData.get("revokeOtherSessions") === "on";
+
+  if (!currentPassword) {
+    return { status: "error", message: "Enter your current password." };
+  }
+  if (newPassword.length < 8) {
+    return {
+      status: "error",
+      message: "New password must be at least 8 characters.",
+    };
+  }
+  if (newPassword !== confirmPassword) {
+    return { status: "error", message: "New passwords do not match." };
+  }
+
+  try {
+    await auth.api.changePassword({
+      body: { currentPassword, newPassword, revokeOtherSessions },
+      headers: await headers(),
+    });
+    return { status: "success", message: "Password updated." };
+  } catch (error) {
+    console.error("[admin] changeAccountPassword failed:", error);
+    return {
+      status: "error",
+      message:
+        error instanceof Error && /password/i.test(error.message)
+          ? error.message
+          : "Failed to update password.",
+    };
+  }
+}
+
 /* --------------------------- Content ----------------------------- */
 
 export async function saveContent(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  await requireAdmin();
+
   if (!db) {
     return {
       status: "error",
@@ -61,6 +151,8 @@ export async function saveStats(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  await requireAdmin();
+
   if (!db) {
     return {
       status: "error",
@@ -101,6 +193,8 @@ export async function saveStats(
 /* ----------------------------- Media ----------------------------- */
 
 export async function deleteMedia(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   if (!db) return;
   const id = Number(formData.get("id"));
   const key = String(formData.get("key") ?? "");
@@ -125,6 +219,8 @@ export async function createUserAction(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  await requireAdmin();
+
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "")
     .trim()
@@ -139,7 +235,7 @@ export async function createUserAction(
     return { status: "error", message: "Password must be 8+ characters." };
 
   try {
-    await auth.api.createUser({
+    await adminAuthApi.createUser({
       body: { name, email, password, role },
       headers: await headers(),
     });
@@ -156,12 +252,14 @@ export async function createUserAction(
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   const userId = String(formData.get("userId") ?? "");
   const role =
     String(formData.get("role") ?? "user") === "admin" ? "admin" : "user";
   if (!userId) return;
   try {
-    await auth.api.setRole({
+    await adminAuthApi.setRole({
       body: { userId, role },
       headers: await headers(),
     });
@@ -172,17 +270,19 @@ export async function setUserRoleAction(formData: FormData): Promise<void> {
 }
 
 export async function setUserBanAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   const userId = String(formData.get("userId") ?? "");
   const ban = String(formData.get("ban") ?? "") === "1";
   if (!userId) return;
   try {
     if (ban) {
-      await auth.api.banUser({
+      await adminAuthApi.banUser({
         body: { userId },
         headers: await headers(),
       });
     } else {
-      await auth.api.unbanUser({
+      await adminAuthApi.unbanUser({
         body: { userId },
         headers: await headers(),
       });
@@ -194,10 +294,12 @@ export async function setUserBanAction(formData: FormData): Promise<void> {
 }
 
 export async function deleteUserAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   const userId = String(formData.get("userId") ?? "");
   if (!userId) return;
   try {
-    await auth.api.removeUser({
+    await adminAuthApi.removeUser({
       body: { userId },
       headers: await headers(),
     });
@@ -222,6 +324,8 @@ export async function saveDoc(
   _prev: SaveState,
   formData: FormData,
 ): Promise<SaveState> {
+  await requireAdmin();
+
   if (!db) {
     return { status: "error", message: "Database not configured." };
   }
@@ -280,6 +384,8 @@ export async function saveDoc(
 }
 
 export async function deleteDoc(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   if (!db) return;
   const id = Number(formData.get("id"));
   if (!Number.isFinite(id)) return;
@@ -293,6 +399,8 @@ export async function deleteDoc(formData: FormData): Promise<void> {
 }
 
 export async function toggleDocPublished(formData: FormData): Promise<void> {
+  await requireAdmin();
+
   if (!db) return;
   const id = Number(formData.get("id"));
   const next = formData.get("publish") === "1";

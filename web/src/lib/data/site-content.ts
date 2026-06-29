@@ -94,11 +94,68 @@ export const CONTENT_FIELDS: ContentField[] = [
     group: "Site & SEO",
     default: "OfficialTomeku",
   },
+  {
+    key: "presentation.youtube",
+    label: "YouTube video ID or URL",
+    group: "Presentation",
+    default: "",
+  },
+  {
+    key: "presentation.mode_label",
+    label: "Mode label",
+    group: "Presentation",
+    default: "Presentation mode",
+  },
+  {
+    key: "presentation.launch_title",
+    label: "Launch title",
+    group: "Presentation",
+    default: "Launch Presentation",
+  },
+  {
+    key: "presentation.launch_description",
+    label: "Launch description",
+    group: "Presentation",
+    multiline: true,
+    default:
+      "One click opens fullscreen and starts the video. Browser security requires this launch click before fullscreen can begin.",
+  },
+  {
+    key: "presentation.helper_text",
+    label: "Playback helper text",
+    group: "Presentation",
+    default: "YouTube controls remain available during playback.",
+  },
+  {
+    key: "presentation.countdown_title",
+    label: "Countdown title",
+    group: "Presentation",
+    default: "Entering AgentMesh",
+  },
+  {
+    key: "presentation.countdown_description",
+    label: "Countdown description",
+    group: "Presentation",
+    multiline: true,
+    default: "The main website opens automatically when the countdown finishes.",
+  },
+  {
+    key: "presentation.countdown_seconds",
+    label: "Countdown seconds",
+    group: "Presentation",
+    default: "5",
+  },
+  {
+    key: "presentation.redirect_path",
+    label: "Redirect path after countdown",
+    group: "Presentation",
+    default: "/",
+  },
 ];
 
 /** Field groups that make up the editable "content" (vs. global settings). */
 export const CONTENT_GROUPS = ["Hero", "Call to action"];
-export const SETTINGS_GROUPS = ["Site & SEO"];
+export const SETTINGS_GROUPS = ["Site & SEO", "Presentation"];
 
 export function fieldsForGroups(groups: string[]): ContentField[] {
   return CONTENT_FIELDS.filter((f) => groups.includes(f.group));

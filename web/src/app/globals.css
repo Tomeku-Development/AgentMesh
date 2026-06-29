@@ -207,6 +207,61 @@
   .animate-orbit {
     animation: spin-slow 40s linear infinite;
   }
+  .presentation-speed-lines {
+    background:
+      linear-gradient(104deg, transparent 0 43%, rgb(255 106 0 / 20%) 43.2% 43.8%, transparent 44% 100%),
+      repeating-linear-gradient(
+        104deg,
+        transparent 0 42px,
+        rgb(255 255 255 / 6%) 43px 44px,
+        transparent 45px 120px
+      );
+    animation: presentation-lines 1.6s linear infinite;
+  }
+
+  .presentation-countdown-ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(48vw, 280px);
+    aspect-ratio: 1;
+  }
+
+  .presentation-countdown-ring::before,
+  .presentation-countdown-ring::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgb(255 106 0 / 45%);
+    border-radius: 999px;
+    animation: presentation-ring 1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+
+  .presentation-countdown-ring::after {
+    inset: 12%;
+    border-color: rgb(255 255 255 / 18%);
+    animation-delay: 0.15s;
+  }
+
+  @keyframes presentation-lines {
+    from {
+      transform: translateX(-4%);
+    }
+    to {
+      transform: translateX(4%);
+    }
+  }
+
+  @keyframes presentation-ring {
+    from {
+      opacity: 0.9;
+      transform: scale(0.88);
+    }
+    to {
+      opacity: 0;
+      transform: scale(1.12);
+    }
+  }
   .delay-1 {
     animation-delay: 0.08s;
   }

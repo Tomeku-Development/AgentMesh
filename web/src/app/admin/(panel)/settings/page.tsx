@@ -19,8 +19,8 @@ export default async function AdminSettingsPage() {
           Website Settings
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Global site identity and default SEO metadata. Applied across the
-          public site.
+          Global site identity, default SEO metadata, and presentation mode
+          settings. Applied across the public site.
         </p>
       </header>
 

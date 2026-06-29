@@ -93,10 +93,26 @@ All navigation and footer links resolve to real routes:
 | Top-level | `/solutions`, `/agents`, `/docs`, `/docs/api`, `/sdks` |
 | Company | `/about`, `/blog`, `/blog/[slug]`, `/careers`, `/contact` |
 | Legal / status | `/privacy`, `/terms`, `/status` |
+| Promotion | `/presentation?video=<youtube-id-or-url>` |
 
 The navbar (Platform, Developers, Company) uses dropdown menus with active-state
 highlighting; GitHub opens externally. Navbar and footer are global (rendered in
 `app/layout.tsx`).
+
+## Presentation Mode
+
+`/presentation` is a full-screen promotional video experience. Configure the
+default video and countdown copy from `/admin/settings` under the
+`Presentation` group, set `NEXT_PUBLIC_PRESENTATION_YOUTUBE_ID`, or pass a
+YouTube ID/URL in the query:
+
+```text
+/presentation?video=YOUR_VIDEO_ID
+```
+
+Browsers require a click before fullscreen can start, so the page opens with a
+launch control. When the video ends, it runs a racing-style countdown and then
+redirects to `/`, with controls to replay or skip immediately.
 
 ## API & backend
 

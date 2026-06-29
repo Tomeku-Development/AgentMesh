@@ -69,8 +69,10 @@ export function Navbar() {
     });
   }
 
-  // The admin area has its own chrome.
-  if (pathname?.startsWith("/admin")) return null;
+  // The admin and presentation areas have their own chrome.
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/presentation")) {
+    return null;
+  }
 
   return (
     <>
